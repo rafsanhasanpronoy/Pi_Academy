@@ -17,6 +17,9 @@
       <p class="text-sm text-muted md:col-span-1">{{ notice.published_date|date:"d M Y" }}</p>
       <div class="md:col-span-3">
         <h3 class="text-lg font-bold mb-2 flex items-start"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>{{ notice.title }}</h3>
+        {% if notice.image_url %}
+        <img src="{{ notice.image_url }}" alt="{{ notice.title }}" class="w-full max-w-md h-48 object-cover mb-4 rounded">
+        {% endif %}
         <p class="text-sm text-muted leading-relaxed">{{ notice.description }}</p>
       </div>
     </div>

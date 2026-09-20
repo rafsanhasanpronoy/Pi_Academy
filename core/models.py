@@ -268,6 +268,7 @@ class Notice(models.Model):
     id = models.BigAutoField(primary_key=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
+    image_url = models.TextField(blank=True, null=True)
     published_date = models.DateField()
     is_published = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)

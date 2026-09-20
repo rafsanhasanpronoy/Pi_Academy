@@ -609,9 +609,15 @@ class ClassScheduleForm(TailwindStyledFormMixin, forms.ModelForm):
 class NoticeForm(TailwindStyledFormMixin, forms.ModelForm):
     """Used by admin.NoticeAdmin's custom add/change views."""
 
+    image_upload = forms.ImageField(
+        required=False,
+        label="Upload Image",
+        help_text="Optional. Uploading a file replaces whatever is in Image URL below.",
+    )
+
     class Meta:
         model = Notice
-        fields = ["title", "description", "published_date", "is_published"]
+        fields = ["title", "description", "image_url", "published_date", "is_published"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 5}),
             "published_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -621,7 +627,25 @@ class NoticeForm(TailwindStyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["published_date"].input_formats = ["%Y-%m-%d"]
         self.fields["is_published"].required = False
+        self.fields["image_url"].required = False
+        self.fields["image_url"].label = "Image URL (or paste a link instead)"
+        self.fields["image_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
+        self.order_fields(
+            ["title", "description", "image_upload", "image_url", "published_date", "is_published"]
+        )
         self._style_fields()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        uploaded = self.cleaned_data.get("image_upload")
+        if uploaded:
+            from django.core.files.storage import default_storage
+
+            path = default_storage.save(f"notices/{uploaded.name}", uploaded)
+            instance.image_url = default_storage.url(path)
+        if commit:
+            instance.save()
+        return instance
 
 
 class AchievementForm(TailwindStyledFormMixin, forms.ModelForm):

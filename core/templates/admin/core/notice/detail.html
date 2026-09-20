@@ -18,6 +18,14 @@
     letter-spacing: 0.04em;
   }
   .detail-value { font-size: 1.05rem; font-weight: 600; color: var(--text); }
+  .detail-image {
+    width: 100%;
+    max-width: 420px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    display: block;
+  }
 </style>
 {% endblock %}
 
@@ -41,6 +49,9 @@
 </div>
 
 <div class="panel" style="padding:28px;">
+  {% if instance.image_url %}
+  <img src="{{ instance.image_url }}" alt="{{ instance.title }}" class="detail-image">
+  {% endif %}
   <div class="detail-grid" style="margin-bottom:24px;">
     <div class="detail-item">
       <span class="detail-label">Status</span>

@@ -2502,7 +2502,7 @@ class NoticeAdmin(admin.ModelAdmin):
 
     def _notice_form_view(self, request, instance):
         if request.method == "POST":
-            form = NoticeForm(request.POST, instance=instance)
+            form = NoticeForm(request.POST, request.FILES, instance=instance)
             if form.is_valid():
                 form.save()
                 self.message_user(
