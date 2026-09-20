@@ -13,16 +13,27 @@
   {% if achievements %}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6 stagger">
     {% for a in achievements %}
-    <div data-reveal class="border border-hair p-7 card-lift">
+    <div
+      data-reveal
+      data-achievement-card
+      data-title="{{ a.title }}"
+      data-date="{% if a.achievement_date %}{{ a.achievement_date|date:'d M Y' }}{% endif %}"
+      data-image="{% if a.image_url %}{{ a.image_url }}{% endif %}"
+      data-description="{{ a.description|default:'' }}"
+      class="border border-hair p-7 card-lift cursor-pointer"
+      role="button"
+      tabindex="0"
+      aria-haspopup="dialog"
+    >
       {% if a.image_url %}
-      <img src="{{ a.image_url }}" alt="{{ a.title }}" class="w-full h-40 object-cover mb-5">
+      <img src="{{ a.image_url }}" alt="{{ a.title }}" class="w-full h-40 object-cover mb-5 rounded-lg">
       {% endif %}
       {% if a.achievement_date %}
       <p class="text-xs text-muted mb-2">{{ a.achievement_date|date:"d M Y" }}</p>
       {% endif %}
       <h3 class="font-bold mb-2 flex items-start"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>{{ a.title }}</h3>
       {% if a.description %}
-      <p class="text-sm text-muted leading-relaxed">{{ a.description }}</p>
+      <p class="text-sm text-muted leading-relaxed line-clamp-3">{{ a.description }}</p>
       {% endif %}
     </div>
     {% endfor %}
@@ -31,4 +42,127 @@
   <p class="text-muted">No achievements published yet — check back soon.</p>
   {% endif %}
 </section>
+
+<!-- Achievement detail modal -->
+<div
+  id="achievementModal"
+  class="fixed inset-0 z-50 hidden items-center justify-center p-4"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="achievementModalTitle"
+>
+  <div id="achievementModalOverlay" class="absolute inset-0 bg-ink/60 backdrop-blur-sm"></div>
+
+  <div
+    id="achievementModalPanel"
+    class="relative bg-paper w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl shadow-2xl transform scale-95 opacity-0 transition-all duration-200 ease-out"
+  >
+    <button
+      id="achievementModalClose"
+      type="button"
+      aria-label="Close"
+      class="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-paper/90 border border-hair text-ink hover:bg-surface transition-colors"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+
+    <div id="achievementModalImageWrap" class="hidden">
+      <img id="achievementModalImage" src="" alt="" class="w-full max-h-96 object-cover rounded-t-2xl">
+    </div>
+
+    <div class="p-8 md:p-10">
+      <p id="achievementModalDate" class="text-xs text-muted mb-3 hidden font-mono"></p>
+      <h2 id="achievementModalTitle" class="text-2xl md:text-3xl font-bold tracking-tight mb-4"></h2>
+      <p id="achievementModalDescription" class="text-muted leading-relaxed whitespace-pre-line"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var modal = document.getElementById('achievementModal');
+    var overlay = document.getElementById('achievementModalOverlay');
+    var panel = document.getElementById('achievementModalPanel');
+    var closeBtn = document.getElementById('achievementModalClose');
+    var imgWrap = document.getElementById('achievementModalImageWrap');
+    var img = document.getElementById('achievementModalImage');
+    var dateEl = document.getElementById('achievementModalDate');
+    var titleEl = document.getElementById('achievementModalTitle');
+    var descEl = document.getElementById('achievementModalDescription');
+    var lastFocused = null;
+
+    function openModal(card) {
+      var title = card.getAttribute('data-title') || '';
+      var date = card.getAttribute('data-date') || '';
+      var image = card.getAttribute('data-image') || '';
+      var description = card.getAttribute('data-description') || '';
+
+      titleEl.textContent = title;
+
+      if (date) {
+        dateEl.textContent = date;
+        dateEl.classList.remove('hidden');
+      } else {
+        dateEl.classList.add('hidden');
+      }
+
+      if (image) {
+        img.src = image;
+        img.alt = title;
+        imgWrap.classList.remove('hidden');
+      } else {
+        img.src = '';
+        imgWrap.classList.add('hidden');
+      }
+
+      descEl.textContent = description;
+
+      lastFocused = document.activeElement;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+
+      // Animate in on the next frame so the transition actually runs.
+      requestAnimationFrame(function () {
+        panel.classList.remove('scale-95', 'opacity-0');
+        panel.classList.add('scale-100', 'opacity-100');
+      });
+
+      closeBtn.focus();
+    }
+
+    function closeModal() {
+      panel.classList.remove('scale-100', 'opacity-100');
+      panel.classList.add('scale-95', 'opacity-0');
+      document.body.style.overflow = '';
+      setTimeout(function () {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 180);
+      if (lastFocused && typeof lastFocused.focus === 'function') {
+        lastFocused.focus();
+      }
+    }
+
+    document.querySelectorAll('[data-achievement-card]').forEach(function (card) {
+      card.addEventListener('click', function () {
+        openModal(card);
+      });
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openModal(card);
+        }
+      });
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+        closeModal();
+      }
+    });
+  })();
+</script>
 {% endblock %}
