@@ -29,6 +29,21 @@
     color: var(--muted);
     margin-top: 8px;
   }
+  .upload-caption-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+  }
+  .upload-caption-row span {
+    font-size: 0.82rem;
+    color: var(--muted);
+    width: 160px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>
 {% endblock %}
 
@@ -101,6 +116,7 @@
       {% for error in form.images_upload.errors %}
       <p class="form-error">{{ error }}</p>
       {% endfor %}
+      <div id="uploadCaptions" style="margin-top:12px;"></div>
     </div>
 
     {% if form.non_field_errors %}
@@ -117,4 +133,44 @@
     </div>
   </form>
 </div>
+
+<script>
+  (function () {
+    var fileInput = document.getElementById("{{ form.images_upload.id_for_label }}");
+    var container = document.getElementById('uploadCaptions');
+    if (!fileInput || !container) return;
+
+    fileInput.addEventListener('change', function () {
+      container.innerHTML = '';
+      var files = Array.prototype.slice.call(fileInput.files || []);
+      if (!files.length) return;
+
+      var heading = document.createElement('p');
+      heading.className = 'form-help';
+      heading.style.marginBottom = '4px';
+      heading.textContent = 'Optional caption for each new photo:';
+      container.appendChild(heading);
+
+      files.forEach(function (file, i) {
+        var row = document.createElement('div');
+        row.className = 'upload-caption-row';
+
+        var label = document.createElement('span');
+        label.textContent = file.name;
+        label.title = file.name;
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.name = 'upload_caption__' + i;
+        input.placeholder = 'Caption (optional)';
+        input.className =
+          'w-full border border-ink/15 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink/40 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors';
+
+        row.appendChild(label);
+        row.appendChild(input);
+        container.appendChild(row);
+      });
+    });
+  })();
+</script>
 {% endblock %}

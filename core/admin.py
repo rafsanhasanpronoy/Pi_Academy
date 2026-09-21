@@ -2699,9 +2699,10 @@ class GallerySubsectionAdmin(admin.ModelAdmin):
                 if uploaded:
                     from django.core.files.storage import default_storage
 
-                    for f in uploaded:
+                    for i, f in enumerate(uploaded):
                         path = default_storage.save(f"gallery/{f.name}", f)
-                        current.append({"url": default_storage.url(path), "description": ""})
+                        caption = request.POST.get(f"upload_caption__{i}", "").strip()
+                        current.append({"url": default_storage.url(path), "description": caption})
 
                 saved.images = current
                 saved.save()
