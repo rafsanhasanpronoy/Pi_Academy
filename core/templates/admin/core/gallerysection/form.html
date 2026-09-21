@@ -1,0 +1,50 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{% if instance %}Edit Section{% else %}Add Section{% endif %} — Dashboard{% endblock %}
+{% block crumb %}{% if instance %}Edit section{% else %}Add a section{% endif %}{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_gallerysection_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Gallery Sections
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if instance %}Edit section{% else %}Add a section{% endif %}</h1>
+    <p class="page-sub">{% if instance %}Update details for {{ instance.title }}{% else %}Fill in the details below{% endif %}</p>
+  </div>
+</div>
+
+<div class="panel form-card">
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-field">
+      <label for="{{ field.id_for_label }}" class="form-label">
+        {{ field.label }}{% if field.field.required %} *{% endif %}
+      </label>
+      {{ field }}
+      {% if field.help_text %}
+      <p class="form-help">{{ field.help_text }}</p>
+      {% endif %}
+      {% for error in field.errors %}
+      <p class="form-error">{{ error }}</p>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    {% if form.non_field_errors %}
+    {% for error in form.non_field_errors %}
+    <p class="form-error">{{ error }}</p>
+    {% endfor %}
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">
+        {% if instance %}Save changes{% else %}Add section{% endif %}
+      </button>
+      <a href="{% url 'admin:core_gallerysection_changelist' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

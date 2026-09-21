@@ -17,7 +17,8 @@ from django.db.models import Count, Q, Sum
 from .forms import (
     AchievementForm, AdmissionInfoForm, AdmissionInquiryAdminForm, BatchForm, ClassForm,
     ClassScheduleForm, ContactMessageAdminForm, ExamForm, ExamResultForm, FacultyForm,
-    GalleryForm, NoticeForm, StudentForm, StudentPaymentForm, SubjectForm, TeacherSalaryForm,
+    GalleryForm, GallerySectionForm, GallerySubsectionForm, NoticeForm, StudentForm,
+    StudentPaymentForm, SubjectForm, TeacherSalaryForm,
 )
 import openpyxl
 import re
@@ -38,6 +39,8 @@ from .models import (
     TeacherSalary,
     Achievement,
     Gallery,
+    GallerySection,
+    GallerySubsection,
     Notice,
     AdmissionInfo,
     AdmissionInquiry,
@@ -2531,6 +2534,207 @@ class NoticeAdmin(admin.ModelAdmin):
             obj.delete()
             self.message_user(request, "Notice deleted.", level=messages.SUCCESS)
         return redirect("admin:core_notice_changelist")
+
+
+@admin.register(GallerySection)
+class GallerySectionAdmin(admin.ModelAdmin):
+    search_fields = ("title", "description")
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        sections = GallerySection.objects.all().order_by("sort_order", "title")
+        context = dict(
+            self.admin_site.each_context(request),
+            sections=sections,
+            active_section="content",
+            active_page="gallerysection_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysection/list.html", context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/view/",
+                self.admin_site.admin_view(self.view_view),
+                name="core_gallerysection_view",
+            ),
+        ]
+        return custom_urls + urls
+
+    def add_view(self, request, form_url="", extra_context=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        return self._section_form_view(request, instance=None)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(GallerySection, pk=object_id)
+        return self._section_form_view(request, instance=instance)
+
+    def view_view(self, request, object_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(GallerySection, pk=object_id)
+        subsections = GallerySubsection.objects.filter(section=instance).order_by("sort_order", "title")
+        context = dict(
+            self.admin_site.each_context(request),
+            instance=instance,
+            subsections=subsections,
+            active_section="content",
+            active_page="gallerysection_view",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysection/detail.html", context)
+
+    def _section_form_view(self, request, instance):
+        if request.method == "POST":
+            form = GallerySectionForm(request.POST, instance=instance)
+            if form.is_valid():
+                form.save()
+                self.message_user(
+                    request,
+                    f"Section {'updated' if instance else 'added'} successfully.",
+                    level=messages.SUCCESS,
+                )
+                return redirect("admin:core_gallerysection_changelist")
+        else:
+            form = GallerySectionForm(instance=instance)
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            instance=instance,
+            active_section="content",
+            active_page="gallerysection_edit" if instance else "gallerysection_add",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysection/form.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(GallerySection, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Section deleted (its subsections went with it).", level=messages.SUCCESS)
+        return redirect("admin:core_gallerysection_changelist")
+
+
+@admin.register(GallerySubsection)
+class GallerySubsectionAdmin(admin.ModelAdmin):
+    search_fields = ("title", "description")
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        subsections = GallerySubsection.objects.select_related("section").order_by(
+            "section__sort_order", "sort_order", "title"
+        )
+        context = dict(
+            self.admin_site.each_context(request),
+            subsections=subsections,
+            active_section="content",
+            active_page="gallerysubsection_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysubsection/list.html", context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/view/",
+                self.admin_site.admin_view(self.view_view),
+                name="core_gallerysubsection_view",
+            ),
+        ]
+        return custom_urls + urls
+
+    def add_view(self, request, form_url="", extra_context=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        return self._subsection_form_view(request, instance=None)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(GallerySubsection, pk=object_id)
+        return self._subsection_form_view(request, instance=instance)
+
+    def view_view(self, request, object_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(GallerySubsection, pk=object_id)
+        context = dict(
+            self.admin_site.each_context(request),
+            instance=instance,
+            active_section="content",
+            active_page="gallerysubsection_view",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysubsection/detail.html", context)
+
+    def _subsection_form_view(self, request, instance):
+        if request.method == "POST":
+            form = GallerySubsectionForm(request.POST, request.FILES, instance=instance)
+            if form.is_valid():
+                saved = form.save(commit=False)
+
+                # Existing images vary per subsection, so their per-image
+                # description + removal checkbox aren't declared fields on
+                # the form — they're plain inputs named desc__<i> /
+                # remove__<i> in the template, keyed to the image's
+                # position in the list as it was when the page loaded.
+                current = []
+                for i, item in enumerate(instance.images if instance else []):
+                    if request.POST.get(f"remove__{i}"):
+                        continue
+                    desc = request.POST.get(f"desc__{i}", item.get("description", "")).strip()
+                    current.append({"url": item.get("url", ""), "description": desc})
+
+                uploaded = form.cleaned_data.get("images_upload") or []
+                if uploaded:
+                    from django.core.files.storage import default_storage
+
+                    for f in uploaded:
+                        path = default_storage.save(f"gallery/{f.name}", f)
+                        current.append({"url": default_storage.url(path), "description": ""})
+
+                saved.images = current
+                saved.save()
+                self.message_user(
+                    request,
+                    f"Subsection {'updated' if instance else 'added'} successfully.",
+                    level=messages.SUCCESS,
+                )
+                return redirect("admin:core_gallerysubsection_changelist")
+        else:
+            initial = {}
+            section_id = request.GET.get("section")
+            if section_id and not instance:
+                initial["section"] = section_id
+            form = GallerySubsectionForm(instance=instance, initial=initial)
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            instance=instance,
+            active_section="content",
+            active_page="gallerysubsection_edit" if instance else "gallerysubsection_add",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/gallerysubsection/form.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(GallerySubsection, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Subsection deleted.", level=messages.SUCCESS)
+        return redirect("admin:core_gallerysubsection_changelist")
 
 
 @admin.register(AdmissionInfo)

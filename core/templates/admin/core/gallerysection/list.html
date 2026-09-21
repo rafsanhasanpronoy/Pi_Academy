@@ -1,0 +1,65 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}Gallery Sections — Dashboard{% endblock %}
+{% block crumb %}Gallery Sections{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Gallery Sections</h1>
+    <p class="page-sub">{{ sections|length }} section{{ sections|length|pluralize }} — each can hold several subsections of images</p>
+  </div>
+  <a href="{% url 'admin:core_gallerysection_add' %}" class="btn btn-accent">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+    Add a section
+  </a>
+</div>
+
+<div class="panel">
+  {% if sections %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Order</th>
+        <th>Status</th>
+        <th style="width:220px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sections %}
+      <tr>
+        <td style="font-weight:600;">{{ s.title }}</td>
+        <td>{{ s.sort_order }}</td>
+        <td><span class="pill">{% if s.is_published %}Published{% else %}Draft{% endif %}</span></td>
+        <td>
+          <div class="row-actions">
+            <a class="btn btn-ghost btn-sm" href="{% url 'admin:core_gallerysection_view' s.id %}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              View
+            </a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'admin:core_gallerysection_change' s.id %}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Edit
+            </a>
+            <form method="post" action="{% url 'admin:core_gallerysection_delete' s.id %}" onsubmit="return confirm('Delete {{ s.title|escapejs }}? This also deletes every subsection and image inside it. This cannot be undone.');" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger btn-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                Delete
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <p>No sections yet. Add your first one to get started — you'll be able to add subsections of images inside it.</p>
+    <a href="{% url 'admin:core_gallerysection_add' %}" class="btn btn-accent" style="margin-top:12px;">Add a section</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

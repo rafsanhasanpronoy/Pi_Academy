@@ -10,30 +10,48 @@
 <div class="ruler-divider"></div>
 
 <section data-reveal class="max-w-6xl mx-auto px-6 py-16">
-  {% if categories %}
-  {% for category, items in categories.items %}
-  <div class="mb-14 last:mb-0">
-    <h2 class="text-xl font-bold mb-6 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>{{ category }}</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 stagger">
-      {% for item in items %}
-      <div data-reveal class="border border-hair overflow-hidden group">
-        <button type="button"
-                onclick="openLightbox('{{ item.image_url|escapejs }}', '{{ item.title|default:category|escapejs }}')"
-                class="relative w-full text-left cursor-zoom-in overflow-hidden bg-surface flex items-center justify-center h-56">
-          <img src="{{ item.image_url }}" alt="{{ item.title|default:category }}"
-               class="w-full h-full object-contain transition-transform duration-500 ease-out group-hover:scale-105">
-          <span class="absolute inset-0 bg-ink/0 group-hover:bg-ink/10 transition-colors duration-300 flex items-center justify-center">
-            <span class="w-10 h-10 rounded-full bg-white/0 group-hover:bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300 shadow-lg">
-              <svg class="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+  {% if sections %}
+  {% for section in sections %}
+  <div class="mb-20 last:mb-0">
+    <h2 class="text-2xl md:text-3xl font-bold tracking-tight mb-2">{{ section.title }}</h2>
+    {% if section.description %}
+    <p class="text-muted mb-8 max-w-2xl">{{ section.description }}</p>
+    {% endif %}
+
+    {% for sub in section.subsections.all %}
+    {% if sub.images %}
+    <div class="mb-12 last:mb-0">
+      <h3 class="text-lg font-bold mb-1 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>{{ sub.title }}</h3>
+      {% if sub.description %}
+      <p class="text-sm text-muted mb-5 max-w-2xl">{{ sub.description }}</p>
+      {% endif %}
+
+      {{ sub.images|json_script:sub.id }}
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 stagger">
+        {% for img in sub.images %}
+        <div data-reveal class="border border-hair overflow-hidden group">
+          <button type="button"
+                  data-gallery-open
+                  data-images-id="{{ sub.id }}"
+                  data-index="{{ forloop.counter0 }}"
+                  class="relative w-full text-left cursor-zoom-in overflow-hidden bg-surface flex items-center justify-center h-56">
+            <img src="{{ img.url }}" alt="{{ img.description|default:sub.title }}"
+                 class="w-full h-full object-contain transition-transform duration-500 ease-out group-hover:scale-105">
+            <span class="absolute inset-0 bg-ink/0 group-hover:bg-ink/10 transition-colors duration-300 flex items-center justify-center">
+              <span class="w-10 h-10 rounded-full bg-white/0 group-hover:bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300 shadow-lg">
+                <svg class="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              </span>
             </span>
-          </span>
-        </button>
-        {% if item.title %}
-        <p class="p-3 text-sm font-semibold">{{ item.title }}</p>
-        {% endif %}
+          </button>
+          {% if img.description %}
+          <p class="p-3 text-sm font-semibold">{{ img.description }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
+    {% endif %}
+    {% endfor %}
   </div>
   {% endfor %}
   {% else %}
@@ -41,49 +59,112 @@
   {% endif %}
 </section>
 
-<!-- Lightbox: click any photo above to open it full-size -->
+<!-- Lightbox: click any photo above to open it full-size, with prev/next when its subsection has more than one image -->
 <div id="lightbox"
      class="fixed inset-0 z-50 bg-ink/90 backdrop-blur-sm flex items-center justify-center p-6 opacity-0 pointer-events-none transition-opacity duration-300">
   <button type="button" id="lightboxClose" aria-label="Close"
           class="absolute top-6 right-6 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-2xl transition-colors">
     &times;
   </button>
+
+  <button type="button" id="lightboxPrev" aria-label="Previous image"
+          class="hidden absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-colors">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <button type="button" id="lightboxNext" aria-label="Next image"
+          class="hidden absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-colors">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
+  </button>
+
   <div class="max-w-4xl max-h-full w-full flex flex-col items-center transition-transform duration-300 scale-95" id="lightboxInner">
     <img id="lightboxImg" src="" alt="" class="max-h-[78vh] max-w-full object-contain rounded-2xl shadow-2xl bg-white">
-    <p id="lightboxCaption" class="text-white text-center mt-4 font-semibold"></p>
+    <p id="lightboxCaption" class="text-white text-center mt-4 font-semibold hidden"></p>
+    <p id="lightboxCounter" class="hidden text-white/60 text-center mt-1 text-sm"></p>
   </div>
 </div>
 
 <script>
-  function openLightbox(src, caption) {
+  (function () {
     var lb = document.getElementById('lightbox');
     var inner = document.getElementById('lightboxInner');
     var img = document.getElementById('lightboxImg');
     var cap = document.getElementById('lightboxCaption');
-    img.src = src;
-    img.alt = caption;
-    cap.textContent = caption;
-    lb.classList.remove('opacity-0', 'pointer-events-none');
-    lb.classList.add('opacity-100', 'pointer-events-auto');
-    inner.classList.remove('scale-95');
-    inner.classList.add('scale-100');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeLightbox() {
-    var lb = document.getElementById('lightbox');
-    var inner = document.getElementById('lightboxInner');
-    lb.classList.add('opacity-0', 'pointer-events-none');
-    lb.classList.remove('opacity-100', 'pointer-events-auto');
-    inner.classList.add('scale-95');
-    inner.classList.remove('scale-100');
-    document.body.style.overflow = '';
-  }
-  document.addEventListener('DOMContentLoaded', function () {
-    var lb = document.getElementById('lightbox');
-    if (!lb) return;
+    var counterEl = document.getElementById('lightboxCounter');
+    var prevBtn = document.getElementById('lightboxPrev');
+    var nextBtn = document.getElementById('lightboxNext');
+    var images = [];
+    var currentIndex = 0;
+
+    function render() {
+      if (!images.length) return;
+      var item = images[currentIndex];
+      img.src = item.url;
+      img.alt = item.description || '';
+      cap.textContent = item.description || '';
+      cap.classList.toggle('hidden', !item.description);
+
+      var multi = images.length > 1;
+      prevBtn.classList.toggle('hidden', !multi);
+      prevBtn.classList.toggle('flex', multi);
+      nextBtn.classList.toggle('hidden', !multi);
+      nextBtn.classList.toggle('flex', multi);
+      counterEl.classList.toggle('hidden', !multi);
+      if (multi) counterEl.textContent = (currentIndex + 1) + ' / ' + images.length;
+    }
+
+    function openLightbox(imagesId, startIndex) {
+      var script = document.getElementById(imagesId);
+      try {
+        images = script ? JSON.parse(script.textContent) : [];
+      } catch (e) {
+        images = [];
+      }
+      if (!images.length) return;
+      currentIndex = startIndex || 0;
+      render();
+      lb.classList.remove('opacity-0', 'pointer-events-none');
+      lb.classList.add('opacity-100', 'pointer-events-auto');
+      inner.classList.remove('scale-95');
+      inner.classList.add('scale-100');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      lb.classList.add('opacity-0', 'pointer-events-none');
+      lb.classList.remove('opacity-100', 'pointer-events-auto');
+      inner.classList.add('scale-95');
+      inner.classList.remove('scale-100');
+      document.body.style.overflow = '';
+    }
+
+    function showPrev() {
+      if (!images.length) return;
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      render();
+    }
+
+    function showNext() {
+      if (!images.length) return;
+      currentIndex = (currentIndex + 1) % images.length;
+      render();
+    }
+
+    document.querySelectorAll('[data-gallery-open]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openLightbox(btn.getAttribute('data-images-id'), parseInt(btn.getAttribute('data-index'), 10));
+      });
+    });
+
+    prevBtn.addEventListener('click', showPrev);
+    nextBtn.addEventListener('click', showNext);
     lb.addEventListener('click', function (e) { if (e.target === lb) closeLightbox(); });
     document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLightbox(); });
-  });
+    document.addEventListener('keydown', function (e) {
+      if (lb.classList.contains('pointer-events-none')) return;
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') showPrev();
+      if (e.key === 'ArrowRight') showNext();
+    });
+  })();
 </script>
 {% endblock %}

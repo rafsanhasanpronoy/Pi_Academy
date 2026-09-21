@@ -5,8 +5,8 @@ from django.core.exceptions import ValidationError
 
 from .models import (
     Achievement, AdmissionInfo, AdmissionInquiry, Batch, Class, ClassSchedule,
-    ContactMessage, Exam, ExamResult, Faculty, Gallery, Notice, Student,
-    StudentPayment, Subject, TeacherSalary,
+    ContactMessage, Exam, ExamResult, Faculty, Gallery, GallerySection, GallerySubsection,
+    Notice, Student, StudentPayment, Subject, TeacherSalary,
 )
 
 INPUT_CLASSES = (
@@ -30,6 +30,28 @@ class TailwindStyledFormMixin:
             field.widget.attrs["class"] = (existing + " " + INPUT_CLASSES).strip()
             if isinstance(field.widget, forms.Textarea):
                 field.widget.attrs.setdefault("rows", 4)
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    """A <input type=file multiple> widget. Paired with MultipleFileField
+    below — Django's built-in FileField only ever cleans a single upload,
+    so both pieces are needed to accept more than one file per submit."""
+
+    allow_multiple_selected = True
+
+    def __init__(self, attrs=None):
+        attrs = {**(attrs or {}), "multiple": True}
+        super().__init__(attrs)
+
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single_file_clean(d, initial) for d in data]
+        return single_file_clean(data, initial)
 
 
 class HoneypotMixin(forms.Form):
@@ -651,15 +673,22 @@ class NoticeForm(TailwindStyledFormMixin, forms.ModelForm):
 class AchievementForm(TailwindStyledFormMixin, forms.ModelForm):
     """Used by admin.AchievementAdmin's custom add/change views."""
 
-    image_upload = forms.ImageField(
+    images_upload = MultipleFileField(
         required=False,
-        label="Upload Image",
-        help_text="Uploading a file replaces whatever is in Image URL below.",
+        label="Add Images",
+        help_text="Select one or more images (hold Ctrl/Cmd to multi-select). "
+        "New uploads are added to the gallery — they don't replace what's already there.",
+    )
+    remove_images = forms.MultipleChoiceField(
+        required=False,
+        label="Existing images",
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Check an image and save to remove it from the gallery.",
     )
 
     class Meta:
         model = Achievement
-        fields = ["title", "description", "image_url", "achievement_date", "is_published"]
+        fields = ["title", "description", "achievement_date", "is_published"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 5}),
             "achievement_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -669,23 +698,46 @@ class AchievementForm(TailwindStyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["achievement_date"].input_formats = ["%Y-%m-%d"]
         self.fields["description"].required = False
-        self.fields["image_url"].required = False
-        self.fields["image_url"].label = "Image URL (or paste a link instead)"
-        self.fields["image_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
         self.fields["is_published"].required = False
+
+        existing_images = []
+        if self.instance and self.instance.pk:
+            existing_images = list(self.instance.image_urls or [])
+            # Fold in a legacy single `image_url` from before the gallery
+            # existed, so old achievements can still have it removed here.
+            if self.instance.image_url and self.instance.image_url not in existing_images:
+                existing_images.append(self.instance.image_url)
+        self.fields["remove_images"].choices = [(url, url) for url in existing_images]
+
         self.order_fields(
-            ["title", "description", "image_upload", "image_url", "achievement_date", "is_published"]
+            ["title", "description", "achievement_date", "is_published", "remove_images", "images_upload"]
         )
         self._style_fields()
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        uploaded = self.cleaned_data.get("image_upload")
+
+        current = list(instance.image_urls or [])
+        if instance.image_url and instance.image_url not in current:
+            current.append(instance.image_url)
+
+        removed = set(self.cleaned_data.get("remove_images") or [])
+        if removed:
+            current = [url for url in current if url not in removed]
+
+        uploaded = self.cleaned_data.get("images_upload") or []
         if uploaded:
             from django.core.files.storage import default_storage
 
-            path = default_storage.save(f"achievements/{uploaded.name}", uploaded)
-            instance.image_url = default_storage.url(path)
+            for f in uploaded:
+                path = default_storage.save(f"achievements/{f.name}", f)
+                current.append(default_storage.url(path))
+
+        instance.image_urls = current
+        # Keep the legacy field in sync (harmless, and avoids stale/duplicate
+        # data if anything still reads image_url directly).
+        instance.image_url = current[0] if current else None
+
         if commit:
             instance.save()
         return instance
@@ -741,6 +793,64 @@ class GalleryForm(TailwindStyledFormMixin, forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class GallerySectionForm(TailwindStyledFormMixin, forms.ModelForm):
+    """Used by admin.GallerySectionAdmin's custom add/change views."""
+
+    class Meta:
+        model = GallerySection
+        fields = ["title", "description", "sort_order", "is_published"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["description"].required = False
+        self.fields["is_published"].required = False
+        self.fields["sort_order"].required = False
+        self.fields["sort_order"].help_text = (
+            "Lower numbers show first on the public Gallery page. Leave as 0 if the order doesn't matter."
+        )
+        self._style_fields()
+
+
+class GallerySubsectionForm(TailwindStyledFormMixin, forms.ModelForm):
+    """Used by admin.GallerySubsectionAdmin's custom add/change views.
+
+    Editing existing images (per-image description, removal) is handled
+    directly in admin._subsection_form_view from raw POST data, since the
+    number of images varies per subsection — a fixed ModelForm field can't
+    represent that. This form only covers the subsection's own fields plus
+    new uploads.
+    """
+
+    images_upload = MultipleFileField(
+        required=False,
+        label="Add Images",
+        help_text="Select one or more images (hold Ctrl/Cmd to multi-select). "
+        "New uploads are added to the gallery below the existing images.",
+    )
+
+    class Meta:
+        model = GallerySubsection
+        fields = ["section", "title", "description", "sort_order", "is_published"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["section"].queryset = GallerySection.objects.all().order_by("sort_order", "title")
+        self.fields["section"].empty_label = None
+        self.fields["description"].required = False
+        self.fields["is_published"].required = False
+        self.fields["sort_order"].required = False
+        self.order_fields(
+            ["section", "title", "description", "sort_order", "is_published", "images_upload"]
+        )
+        self._style_fields()
 
 
 class AdmissionInfoForm(TailwindStyledFormMixin, forms.ModelForm):

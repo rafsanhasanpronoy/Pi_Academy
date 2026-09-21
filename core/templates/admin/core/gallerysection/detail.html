@@ -1,0 +1,122 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{{ instance.title }} — Dashboard{% endblock %}
+{% block crumb %}{{ instance.title }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 18px;
+  }
+  .detail-item { display: flex; flex-direction: column; gap: 4px; }
+  .detail-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .detail-value { font-size: 1.05rem; font-weight: 600; color: var(--text); }
+  .subsection-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+  .subsection-thumbs {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .subsection-thumbs img {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_gallerysection_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Gallery Sections
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ instance.title }}</h1>
+    <p class="page-sub">{% if instance.is_published %}Published{% else %}Draft{% endif %} · order {{ instance.sort_order }}</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_gallerysection_change' instance.id %}" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Edit
+    </a>
+  </div>
+</div>
+
+<div class="panel" style="padding:28px; margin-bottom:24px;">
+  <p class="section-heading" style="font-size:1rem; font-weight:700; margin:0 0 10px;">Description</p>
+  {% if instance.description %}
+  <p style="white-space:pre-line;">{{ instance.description }}</p>
+  {% else %}
+  <p style="color:var(--muted);">No description added.</p>
+  {% endif %}
+</div>
+
+<div class="page-header">
+  <div>
+    <h2 style="font-size:1.2rem; font-weight:700;">Subsections</h2>
+    <p class="page-sub">{{ subsections|length }} subsection{{ subsections|length|pluralize }} in this section</p>
+  </div>
+  <a href="{% url 'admin:core_gallerysubsection_add' %}?section={{ instance.id }}" class="btn btn-accent">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+    Add a subsection
+  </a>
+</div>
+
+<div class="panel" style="padding:20px;">
+  {% if subsections %}
+  {% for sub in subsections %}
+  <div class="subsection-card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+      <div>
+        <p style="font-weight:700;">{{ sub.title }}</p>
+        <p style="font-size:0.85rem; color:var(--muted);">
+          {{ sub.images|length }} image{{ sub.images|length|pluralize }} ·
+          {% if sub.is_published %}Published{% else %}Draft{% endif %}
+        </p>
+      </div>
+      <div class="row-actions">
+        <a class="btn btn-ghost btn-sm" href="{% url 'admin:core_gallerysubsection_view' sub.id %}">View</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'admin:core_gallerysubsection_change' sub.id %}">Edit</a>
+        <form method="post" action="{% url 'admin:core_gallerysubsection_delete' sub.id %}" onsubmit="return confirm('Delete {{ sub.title|escapejs }}? This cannot be undone.');" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% if sub.images %}
+    <div class="subsection-thumbs">
+      {% for img in sub.images|slice:":8" %}
+      <img src="{{ img.url }}" alt="{{ img.description }}">
+      {% endfor %}
+      {% if sub.images|length > 8 %}
+      <span style="align-self:center; font-size:0.8rem; color:var(--muted);">+{{ sub.images|length|add:"-8" }} more</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <p>No subsections yet. Add one to start uploading images to this section.</p>
+    <a href="{% url 'admin:core_gallerysubsection_add' %}?section={{ instance.id }}" class="btn btn-accent" style="margin-top:12px;">Add a subsection</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

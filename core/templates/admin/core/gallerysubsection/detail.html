@@ -1,0 +1,92 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{{ instance.title }} — Dashboard{% endblock %}
+{% block crumb %}{{ instance.title }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 18px;
+  }
+  .detail-item { display: flex; flex-direction: column; gap: 4px; }
+  .detail-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .detail-value { font-size: 1.05rem; font-weight: 600; color: var(--text); }
+  .image-desc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .image-desc-grid img {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: block;
+  }
+  .image-desc-grid p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_gallerysubsection_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Gallery Subsections
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ instance.title }}</h1>
+    <p class="page-sub">In {{ instance.section.title }} · {% if instance.is_published %}Published{% else %}Draft{% endif %}</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_gallerysubsection_change' instance.id %}" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Edit
+    </a>
+  </div>
+</div>
+
+<div class="panel" style="padding:28px;">
+  {% if instance.images %}
+  <div class="image-desc-grid">
+    {% for img in instance.images %}
+    <div>
+      <img src="{{ img.url }}" alt="{{ img.description }}">
+      {% if img.description %}
+      <p>{{ img.description }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="detail-grid" style="margin-bottom:24px;">
+    <div class="detail-item">
+      <span class="detail-label">Section</span>
+      <span class="detail-value">{{ instance.section.title }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="detail-label">Status</span>
+      <span class="detail-value"><span class="pill">{% if instance.is_published %}Published{% else %}Draft{% endif %}</span></span>
+    </div>
+  </div>
+  <p class="section-heading" style="font-size:1rem; font-weight:700; margin:0 0 10px;">Description</p>
+  {% if instance.description %}
+  <p style="white-space:pre-line;">{{ instance.description }}</p>
+  {% else %}
+  <p style="color:var(--muted);">No description added.</p>
+  {% endif %}
+</div>
+{% endblock %}

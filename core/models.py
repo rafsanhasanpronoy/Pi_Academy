@@ -21,6 +21,7 @@ class Achievement(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     image_url = models.TextField(blank=True, null=True)
+    image_urls = models.JSONField(default=list, blank=True)
     achievement_date = models.DateField(blank=True, null=True)
     is_published = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -262,6 +263,57 @@ class Gallery(models.Model):
 
     def __str__(self):
         return self.title or f"Gallery item #{self.pk}"
+
+
+class GallerySection(models.Model):
+    """A top-level heading on the public Gallery page, e.g. 'Sports Day
+    2026' or 'Campus'. Holds one or more GallerySubsections."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    is_published = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'gallery_sections'
+        verbose_name = 'Gallery Section'
+        verbose_name_plural = 'Gallery Sections'
+
+    def __str__(self):
+        return self.title
+
+
+class GallerySubsection(models.Model):
+    """A group of images within a GallerySection, e.g. 'Day 1' or
+    'Prize Giving'. `images` holds the gallery itself: a JSON list of
+    {"url": ..., "description": ...} objects, each editable and
+    individually removable from the admin."""
+
+    id = models.BigAutoField(primary_key=True)
+    section = models.ForeignKey(
+        GallerySection,
+        on_delete=models.CASCADE,
+        related_name='subsections',
+        db_column='section_id',
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    images = models.JSONField(default=list, blank=True)
+    is_published = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'gallery_subsections'
+        verbose_name = 'Gallery Subsection'
+        verbose_name_plural = 'Gallery Subsections'
+
+    def __str__(self):
+        return self.title
 
 
 class Notice(models.Model):

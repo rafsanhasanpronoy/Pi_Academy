@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import F
+from django.db.models import F, Prefetch
 from django.shortcuts import redirect, render
 
 # pip install django-ratelimit
@@ -16,7 +16,8 @@ from .models import (
     ClassSchedule,
     ExamResult,
     Faculty,
-    Gallery,
+    GallerySection,
+    GallerySubsection,
     Notice,
     Student,
 )
@@ -64,11 +65,13 @@ def notices_list(request):
 
 
 def gallery_list(request):
-    items = Gallery.objects.filter(is_published=True).order_by("-created_at")
-    categories = {}
-    for item in items:
-        categories.setdefault(item.category or "General", []).append(item)
-    return render(request, "core/gallery.html", {"categories": categories})
+    sections = GallerySection.objects.filter(is_published=True).order_by("sort_order", "title").prefetch_related(
+        Prefetch(
+            "subsections",
+            queryset=GallerySubsection.objects.filter(is_published=True).order_by("sort_order", "title"),
+        )
+    )
+    return render(request, "core/gallery.html", {"sections": sections})
 
 
 def achievements_list(request):
@@ -77,6 +80,10 @@ def achievements_list(request):
     )
     paginator = Paginator(achievements_qs, 12)
     page_obj = paginator.get_page(request.GET.get("page"))
+    for achievement in page_obj:
+        achievement.gallery_images = achievement.image_urls or (
+            [achievement.image_url] if achievement.image_url else []
+        )
     return render(
         request, "core/achievements.html", {"achievements": page_obj, "page_obj": page_obj}
     )

@@ -1,0 +1,120 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{% if instance %}Edit Subsection{% else %}Add Subsection{% endif %} — Dashboard{% endblock %}
+{% block crumb %}{% if instance %}Edit subsection{% else %}Add a subsection{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .existing-image-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .existing-image-row:last-child { border-bottom: none; }
+  .existing-image-row img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .existing-image-fields { flex: 1; }
+  .existing-image-remove {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_gallerysubsection_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Gallery Subsections
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if instance %}Edit subsection{% else %}Add a subsection{% endif %}</h1>
+    <p class="page-sub">{% if instance %}Update details for {{ instance.title }}{% else %}Fill in the details below{% endif %}</p>
+  </div>
+</div>
+
+<div class="panel form-card">
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+    {% if field.name != "images_upload" %}
+    <div class="form-field">
+      <label for="{{ field.id_for_label }}" class="form-label">
+        {{ field.label }}{% if field.field.required %} *{% endif %}
+      </label>
+      {{ field }}
+      {% if field.help_text %}
+      <p class="form-help">{{ field.help_text }}</p>
+      {% endif %}
+      {% for error in field.errors %}
+      <p class="form-error">{{ error }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% if instance.images %}
+    <div class="form-field">
+      <label class="form-label">Existing images</label>
+      <p class="form-help">Edit a description, or check "remove" and save to delete it from this subsection.</p>
+      <div style="margin-top:8px;">
+        {% for img in instance.images %}
+        <div class="existing-image-row">
+          <img src="{{ img.url }}" alt="">
+          <div class="existing-image-fields">
+            <input
+              type="text"
+              name="desc__{{ forloop.counter0 }}"
+              value="{{ img.description|default:'' }}"
+              placeholder="Description for this image (optional)"
+              class="w-full border border-ink/15 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink/40 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+            >
+            <label class="existing-image-remove">
+              <input type="checkbox" name="remove__{{ forloop.counter0 }}">
+              Remove this image
+            </label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="form-field">
+      <label for="{{ form.images_upload.id_for_label }}" class="form-label">{{ form.images_upload.label }}</label>
+      {{ form.images_upload }}
+      {% if form.images_upload.help_text %}
+      <p class="form-help">{{ form.images_upload.help_text }}</p>
+      {% endif %}
+      {% for error in form.images_upload.errors %}
+      <p class="form-error">{{ error }}</p>
+      {% endfor %}
+    </div>
+
+    {% if form.non_field_errors %}
+    {% for error in form.non_field_errors %}
+    <p class="form-error">{{ error }}</p>
+    {% endfor %}
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">
+        {% if instance %}Save changes{% else %}Add subsection{% endif %}
+      </button>
+      <a href="{% url 'admin:core_gallerysubsection_changelist' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
