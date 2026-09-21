@@ -856,9 +856,15 @@ class GallerySubsectionForm(TailwindStyledFormMixin, forms.ModelForm):
 class AdmissionInfoForm(TailwindStyledFormMixin, forms.ModelForm):
     """Used by admin.AdmissionInfoAdmin's custom add/change views."""
 
+    image_upload = forms.ImageField(
+        required=False,
+        label="Upload Image",
+        help_text="Optional. Uploading a file replaces whatever is in Image URL below.",
+    )
+
     class Meta:
         model = AdmissionInfo
-        fields = ["title", "description", "admission_fee", "monthly_fee", "duration", "is_active"]
+        fields = ["title", "description", "image_url", "admission_fee", "monthly_fee", "duration", "is_active"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 5}),
         }
@@ -870,7 +876,25 @@ class AdmissionInfoForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["monthly_fee"].required = False
         self.fields["duration"].required = False
         self.fields["is_active"].required = False
+        self.fields["image_url"].required = False
+        self.fields["image_url"].label = "Image URL (or paste a link instead)"
+        self.fields["image_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
+        self.order_fields(
+            ["title", "description", "image_upload", "image_url", "admission_fee", "monthly_fee", "duration", "is_active"]
+        )
         self._style_fields()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        uploaded = self.cleaned_data.get("image_upload")
+        if uploaded:
+            from django.core.files.storage import default_storage
+
+            path = default_storage.save(f"admission/{uploaded.name}", uploaded)
+            instance.image_url = default_storage.url(path)
+        if commit:
+            instance.save()
+        return instance
 
 
 class AdmissionInquiryAdminForm(TailwindStyledFormMixin, forms.ModelForm):

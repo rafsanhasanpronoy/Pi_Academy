@@ -38,6 +38,7 @@ class AdmissionInfo(models.Model):
     id = models.BigAutoField(primary_key=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
+    image_url = models.TextField(blank=True, null=True)
     admission_fee = models.DecimalField(
         max_digits=10, decimal_places=2, blank=True, null=True,
         validators=[MinValueValidator(0)],

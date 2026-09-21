@@ -2792,7 +2792,7 @@ class AdmissionInfoAdmin(admin.ModelAdmin):
 
     def _admissioninfo_form_view(self, request, instance):
         if request.method == "POST":
-            form = AdmissionInfoForm(request.POST, instance=instance)
+            form = AdmissionInfoForm(request.POST, request.FILES, instance=instance)
             if form.is_valid():
                 form.save()
                 self.message_user(
