@@ -18,6 +18,13 @@
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6 stagger">
     {% for entry in faculty_data %}
     <div data-reveal class="border border-hair p-7 card-lift">
+      {% if entry.faculty.photo_url %}
+      <img src="{{ entry.faculty.photo_url }}" alt="{{ entry.faculty.full_name }}" class="w-20 h-20 rounded-full object-cover mb-5">
+      {% else %}
+      <div class="w-20 h-20 rounded-full bg-surface border border-hair flex items-center justify-center mb-5 text-lg font-bold text-brand">
+        {{ entry.faculty.full_name|slice:":1" }}
+      </div>
+      {% endif %}
       <h3 class="text-lg font-bold mb-1">{{ entry.faculty.full_name }}</h3>
       {% if entry.faculty.designation %}
       <p class="text-sm text-brand font-semibold mb-4">{{ entry.faculty.designation }}</p>
