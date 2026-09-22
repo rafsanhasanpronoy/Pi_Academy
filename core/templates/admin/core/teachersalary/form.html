@@ -45,6 +45,7 @@
   {% endif %}
 
   <div class="calc-summary" id="calcSummary">
+    <div class="item"><span class="label">Class-Based Pay</span><span class="value" id="calcClassPay">৳0.00</span></div>
     <div class="item"><span class="label">Attendance Deduction</span><span class="value" id="calcAttendanceDeduction">৳0.00</span></div>
     <div class="item"><span class="label">Net Salary</span><span class="value" id="calcNetSalary">৳0.00</span></div>
     <div class="item"><span class="label">Due Amount</span><span class="value due" id="calcDueAmount">৳0.00</span></div>
@@ -95,6 +96,19 @@
         {{ form.deduction }}
         <p class="form-help">{{ form.deduction.help_text }}</p>
         {% if form.deduction.errors %}<div class="form-error">{{ form.deduction.errors.0 }}</div>{% endif %}
+      </div>
+
+      <p class="form-section-label">Per-class pay (for teachers paid by the class)</p>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.classes_taken.id_for_label }}">Classes Taken</label>
+        {{ form.classes_taken }}
+        <p class="form-help">{{ form.classes_taken.help_text }}</p>
+        {% if form.classes_taken.errors %}<div class="form-error">{{ form.classes_taken.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.rate_per_class.id_for_label }}">{{ form.rate_per_class.label }}</label>
+        {{ form.rate_per_class }}
+        {% if form.rate_per_class.errors %}<div class="form-error">{{ form.rate_per_class.errors.0 }}</div>{% endif %}
       </div>
 
       <p class="form-section-label">Attendance for this month</p>
@@ -158,10 +172,13 @@
   var grossEl = document.getElementById('{{ form.gross_salary.id_for_label }}');
   var bonusEl = document.getElementById('{{ form.bonus.id_for_label }}');
   var deductionEl = document.getElementById('{{ form.deduction.id_for_label }}');
+  var classesEl = document.getElementById('{{ form.classes_taken.id_for_label }}');
+  var rateEl = document.getElementById('{{ form.rate_per_class.id_for_label }}');
   var absentEl = document.getElementById('{{ form.absent_days.id_for_label }}');
   var lateEl = document.getElementById('{{ form.late_days.id_for_label }}');
   var paidEl = document.getElementById('{{ form.paid_amount.id_for_label }}');
 
+  var classPayOut = document.getElementById('calcClassPay');
   var attendanceOut = document.getElementById('calcAttendanceDeduction');
   var netOut = document.getElementById('calcNetSalary');
   var dueOut = document.getElementById('calcDueAmount');
@@ -172,16 +189,18 @@
   }
 
   function recalc() {
+    var classBasedPay = num(classesEl) * num(rateEl);
     var attendanceDeduction = num(absentEl) * ABSENT_RATE + num(lateEl) * LATE_RATE;
-    var net = num(grossEl) + num(bonusEl) - num(deductionEl) - attendanceDeduction;
+    var net = num(grossEl) + num(bonusEl) + classBasedPay - num(deductionEl) - attendanceDeduction;
     var due = Math.max(net - num(paidEl), 0);
 
+    classPayOut.textContent = '৳' + classBasedPay.toFixed(2);
     attendanceOut.textContent = '৳' + attendanceDeduction.toFixed(2);
     netOut.textContent = '৳' + net.toFixed(2);
     dueOut.textContent = '৳' + due.toFixed(2);
   }
 
-  [grossEl, bonusEl, deductionEl, absentEl, lateEl, paidEl].forEach(function (el) {
+  [grossEl, bonusEl, deductionEl, classesEl, rateEl, absentEl, lateEl, paidEl].forEach(function (el) {
     if (el) el.addEventListener('input', recalc);
   });
   recalc();

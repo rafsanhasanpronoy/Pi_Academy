@@ -206,6 +206,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ABSENT_DEDUCTION_PER_DAY = env.int("ABSENT_DEDUCTION_PER_DAY", default=300)
 LATE_DEDUCTION_PER_DAY = env.int("LATE_DEDUCTION_PER_DAY", default=150)
 
+# Default ৳/class rate pre-filled on new salary records for teachers paid
+# per class rather than (or alongside) a fixed monthly gross_salary.
+# Editable per record — this is just the starting value.
+DEFAULT_RATE_PER_CLASS = env.int("DEFAULT_RATE_PER_CLASS", default=300)
+
 
 # Production security settings
 # https://docs.djangoproject.com/en/5.2/topics/security/

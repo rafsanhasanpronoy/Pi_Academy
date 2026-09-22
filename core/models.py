@@ -425,6 +425,15 @@ class TeacherSalary(models.Model):
 
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Per-class pay, for teachers paid by the class rather than (or in
+    # addition to) a fixed monthly gross_salary — e.g. 20 classes at
+    # ৳300/class. class_based_pay is stored so it doesn't silently drift
+    # if the default rate in settings changes later.
+    classes_taken = models.PositiveIntegerField(default=0, blank=True)
+    rate_per_class = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    class_based_pay = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     # "Other" deductions only (manual, e.g. an advance) — attendance-based
     # deductions are tracked separately below so re-editing a record never
     # double-applies them.

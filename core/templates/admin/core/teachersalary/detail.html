@@ -62,6 +62,7 @@
   <div class="form-grid">
     <div class="form-field"><span class="form-label">Gross Salary</span><div>৳{{ instance.gross_salary|floatformat:2 }}</div></div>
     <div class="form-field"><span class="form-label">Bonus</span><div>৳{{ instance.bonus|floatformat:2 }}</div></div>
+    <div class="form-field"><span class="form-label">Class-Based Pay</span><div>৳{{ instance.class_based_pay|floatformat:2 }} ({{ instance.classes_taken }} &times; ৳{{ instance.rate_per_class|floatformat:2 }})</div></div>
     <div class="form-field"><span class="form-label">Other Deductions</span><div>৳{{ instance.deduction|floatformat:2 }}</div></div>
     <div class="form-field"><span class="form-label">Attendance Deduction</span><div>৳{{ instance.attendance_deduction|floatformat:2 }}</div></div>
     <div class="form-field"><span class="form-label">Net Salary</span><div class="code-badge">৳{{ instance.net_salary|floatformat:2 }}</div></div>

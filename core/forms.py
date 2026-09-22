@@ -443,6 +443,7 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
         fields = [
             "teacher", "salary_month",
             "gross_salary", "bonus", "deduction",
+            "classes_taken", "rate_per_class",
             "present_days", "absent_days", "late_days",
             "payment_method", "paid_amount", "transaction_id",
             "payment_date", "remarks",
@@ -470,6 +471,14 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["deduction"].label = "Other deductions"
         self.fields["deduction"].help_text = "Anything besides attendance — an advance, a fine, etc."
         self.fields["paid_amount"].required = False
+
+        self.fields["classes_taken"].required = False
+        self.fields["classes_taken"].label = "Classes Taken"
+        self.fields["classes_taken"].help_text = "For teachers paid per class. Leave at 0 for a fixed monthly salary."
+        self.fields["classes_taken"].widget.attrs.setdefault("min", 0)
+        self.fields["rate_per_class"].label = "Rate per Class (৳)"
+        if not self.instance.pk:
+            self.fields["rate_per_class"].initial = settings.DEFAULT_RATE_PER_CLASS
 
         for name in ("present_days", "absent_days", "late_days"):
             self.fields[name].required = False
@@ -508,6 +517,9 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
     def clean_paid_amount(self):
         return self.cleaned_data.get("paid_amount") or 0
 
+    def clean_classes_taken(self):
+        return self.cleaned_data.get("classes_taken") or 0
+
     def clean_present_days(self):
         return self.cleaned_data.get("present_days") or 0
 
@@ -537,15 +549,18 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
         gross_salary = cleaned_data.get("gross_salary") or 0
         bonus = cleaned_data.get("bonus") or 0
         deduction = cleaned_data.get("deduction") or 0
+        classes_taken = cleaned_data.get("classes_taken") or 0
+        rate_per_class = cleaned_data.get("rate_per_class") or 0
         absent_days = cleaned_data.get("absent_days") or 0
         late_days = cleaned_data.get("late_days") or 0
         paid_amount = cleaned_data.get("paid_amount") or 0
 
+        class_based_pay = classes_taken * rate_per_class
         attendance_deduction = (
             absent_days * settings.ABSENT_DEDUCTION_PER_DAY
             + late_days * settings.LATE_DEDUCTION_PER_DAY
         )
-        net_salary = gross_salary + bonus - deduction - attendance_deduction
+        net_salary = gross_salary + bonus + class_based_pay - deduction - attendance_deduction
 
         if paid_amount > net_salary:
             raise ValidationError(
@@ -557,12 +572,14 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
 
+        instance.class_based_pay = (instance.classes_taken or 0) * (instance.rate_per_class or 0)
+
         instance.attendance_deduction = (
             (instance.absent_days or 0) * settings.ABSENT_DEDUCTION_PER_DAY
             + (instance.late_days or 0) * settings.LATE_DEDUCTION_PER_DAY
         )
         instance.net_salary = (
-            (instance.gross_salary or 0) + (instance.bonus or 0)
+            (instance.gross_salary or 0) + (instance.bonus or 0) + instance.class_based_pay
             - (instance.deduction or 0) - instance.attendance_deduction
         )
         instance.due_amount = max(instance.net_salary - (instance.paid_amount or 0), 0)

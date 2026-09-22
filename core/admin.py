@@ -2370,7 +2370,8 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         sheet = workbook.active
         sheet.title = "Salary Report"
         headers = [
-            "Teacher", "Month", "Gross Salary", "Bonus", "Deduction",
+            "Teacher", "Month", "Gross Salary", "Bonus", "Classes Taken",
+            "Rate per Class", "Class-Based Pay", "Deduction",
             "Net Salary", "Paid Amount", "Due Amount", "Payment Method", "Status",
         ]
         sheet.append(headers)
@@ -2383,6 +2384,9 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
                 s.salary_month.strftime("%B %Y"),
                 float(s.gross_salary),
                 float(s.bonus),
+                s.classes_taken,
+                float(s.rate_per_class),
+                float(s.class_based_pay),
                 float(s.deduction + s.attendance_deduction),
                 float(s.net_salary),
                 float(s.paid_amount),
@@ -2411,14 +2415,16 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.platypus import (
+        from reportlab.lib import colors  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib.pagesizes import A4  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import mm  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.platypus import (  # pyright: ignore[reportMissingModuleSource]
             SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
         )
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        from reportlab.lib.styles import (  # pyright: ignore[reportMissingModuleSource]
+            getSampleStyleSheet, ParagraphStyle,
+        )
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # pyright: ignore[reportMissingModuleSource]
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -2472,6 +2478,7 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             ["Item", "Amount (৳)"],
             ["Gross Salary", f"{salary.gross_salary:,.2f}"],
             ["Bonus", f"{salary.bonus:,.2f}"],
+            ["Class-Based Pay", f"{salary.class_based_pay:,.2f} ({salary.classes_taken} × ৳{salary.rate_per_class:,.2f})"],
             ["Other Deductions", f"{salary.deduction:,.2f}"],
             ["Attendance Deduction", f"{salary.attendance_deduction:,.2f}"],
             ["Net Salary", f"{salary.net_salary:,.2f}"],
