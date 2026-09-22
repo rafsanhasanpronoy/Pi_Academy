@@ -2026,7 +2026,7 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         "receipt_number",
         "teacher",
         "salary_month",
-        "gross_salary",
+        "classes_taken",
         "net_salary",
         "paid_amount",
         "due_amount",
@@ -2242,8 +2242,6 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             form=form,
             instance=instance,
             locked_teacher=locked_teacher,
-            absent_rate=settings.ABSENT_DEDUCTION_PER_DAY,
-            late_rate=settings.LATE_DEDUCTION_PER_DAY,
             active_section="finance",
             active_page="teachersalary_edit" if instance else "teachersalary_add",
             opts=self.model._meta,
@@ -2370,9 +2368,9 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         sheet = workbook.active
         sheet.title = "Salary Report"
         headers = [
-            "Teacher", "Month", "Gross Salary", "Bonus", "Classes Taken",
-            "Rate per Class", "Class-Based Pay", "Deduction",
-            "Net Salary", "Paid Amount", "Due Amount", "Payment Method", "Status",
+            "Teacher", "Month", "Classes Taken", "Rate per Class",
+            "Class-Based Pay", "Bonus", "Net Salary", "Paid Amount",
+            "Due Amount", "Payment Method", "Status",
         ]
         sheet.append(headers)
         for col_idx in range(1, len(headers) + 1):
@@ -2382,12 +2380,10 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             sheet.append([
                 s.teacher.full_name,
                 s.salary_month.strftime("%B %Y"),
-                float(s.gross_salary),
-                float(s.bonus),
                 s.classes_taken,
                 float(s.rate_per_class),
                 float(s.class_based_pay),
-                float(s.deduction + s.attendance_deduction),
+                float(s.bonus),
                 float(s.net_salary),
                 float(s.paid_amount),
                 float(s.due_amount),
@@ -2415,16 +2411,14 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors  # pyright: ignore[reportMissingModuleSource]
-        from reportlab.lib.pagesizes import A4  # pyright: ignore[reportMissingModuleSource]
-        from reportlab.lib.units import mm  # pyright: ignore[reportMissingModuleSource]
-        from reportlab.platypus import (  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
             SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
         )
-        from reportlab.lib.styles import (  # pyright: ignore[reportMissingModuleSource]
-            getSampleStyleSheet, ParagraphStyle,
-        )
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -2476,11 +2470,10 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
 
         breakdown_rows = [
             ["Item", "Amount (৳)"],
-            ["Gross Salary", f"{salary.gross_salary:,.2f}"],
+            ["Classes Taken", f"{salary.classes_taken}"],
+            ["Rate per Class", f"{salary.rate_per_class:,.2f}"],
+            ["Class-Based Pay", f"{salary.class_based_pay:,.2f}"],
             ["Bonus", f"{salary.bonus:,.2f}"],
-            ["Class-Based Pay", f"{salary.class_based_pay:,.2f} ({salary.classes_taken} × ৳{salary.rate_per_class:,.2f})"],
-            ["Other Deductions", f"{salary.deduction:,.2f}"],
-            ["Attendance Deduction", f"{salary.attendance_deduction:,.2f}"],
             ["Net Salary", f"{salary.net_salary:,.2f}"],
             ["Paid Amount", f"{salary.paid_amount:,.2f}"],
             ["Due Amount", f"{salary.due_amount:,.2f}"],

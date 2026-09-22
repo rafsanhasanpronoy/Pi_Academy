@@ -132,7 +132,7 @@
         <th>Receipt</th>
         <th>Teacher</th>
         <th>Month</th>
-        <th>Gross</th>
+        <th>Classes</th>
         <th>Net</th>
         <th>Paid</th>
         <th>Due</th>
@@ -147,7 +147,7 @@
         <td><span class="pill">{{ salary.receipt_number|default:"—" }}</span></td>
         <td style="font-weight:600;">{{ salary.teacher.full_name }}</td>
         <td>{{ salary.salary_month|date:"F Y" }}</td>
-        <td>৳{{ salary.gross_salary|floatformat:2 }}</td>
+        <td>{{ salary.classes_taken }} &times; ৳{{ salary.rate_per_class|floatformat:0 }}</td>
         <td style="font-weight:700;">৳{{ salary.net_salary|floatformat:2 }}</td>
         <td>৳{{ salary.paid_amount|floatformat:2 }}</td>
         <td>৳{{ salary.due_amount|floatformat:2 }}</td>
