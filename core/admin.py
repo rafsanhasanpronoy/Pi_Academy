@@ -844,7 +844,7 @@ class StudentAdmin(admin.ModelAdmin):
 
     def _student_form_view(self, request, instance):
         if request.method == "POST":
-            form = StudentForm(request.POST, instance=instance)
+            form = StudentForm(request.POST, request.FILES, instance=instance)
             if form.is_valid():
                 student = form.save(commit=False)
                 if not instance:

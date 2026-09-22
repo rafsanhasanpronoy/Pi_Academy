@@ -290,12 +290,19 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         widget=forms.RadioSelect,
     )
 
+    photo_upload = forms.ImageField(
+        required=False,
+        label="Upload Photo",
+        help_text="Optional. Uploading a file replaces whatever is in Photo URL below.",
+    )
+
     class Meta:
         model = Student
         fields = [
             "class_obj",
             "batch",
             "full_name",
+            "photo_url",
             "gender",
             "date_of_birth",
             "student_phone",
@@ -327,6 +334,9 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["class_obj"].empty_label = "Select a class"
         self.fields["batch"].required = False
         self.fields["batch"].empty_label = "Select a batch (optional)"
+        self.fields["photo_url"].required = False
+        self.fields["photo_url"].label = "Photo URL (or paste a link instead)"
+        self.fields["photo_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
         for name in ("student_phone", "father_name", "father_phone",
                      "mother_name", "mother_phone", "address", "admission_date"):
             self.fields[name].required = False
@@ -348,6 +358,18 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         if admitted and admitted > date.today():
             raise ValidationError("Admission date can't be in the future.")
         return admitted
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        uploaded = self.cleaned_data.get("photo_upload")
+        if uploaded:
+            from django.core.files.storage import default_storage
+
+            path = default_storage.save(f"students/{uploaded.name}", uploaded)
+            instance.photo_url = default_storage.url(path)
+        if commit:
+            instance.save()
+        return instance
 
 
 class StudentPaymentForm(TailwindStyledFormMixin, forms.ModelForm):
