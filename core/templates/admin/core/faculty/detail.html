@@ -101,6 +101,35 @@
       <p class="stat-value">{{ salaries|length }}</p>
     </div>
   </div>
+  <div class="stat-card">
+    <span class="stat-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </span>
+    <div>
+      <p class="stat-label">Total salary paid</p>
+      <p class="stat-value">৳{{ total_paid|floatformat:0 }}</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+    </span>
+    <div>
+      <p class="stat-label">Current due</p>
+      <p class="stat-value">৳{{ current_due|floatformat:0 }}</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="1.2"/><path d="M3.5 10h17"/><path d="M8 3v4M16 3v4"/></svg>
+    </span>
+    <div>
+      <p class="stat-label">Latest salary</p>
+      <p class="stat-value" style="font-size:1.1rem;">
+        {% if latest_salary %}{{ latest_salary.salary_month|date:"M Y" }} · <span class="pill">{{ latest_salary.get_status_display }}</span>{% else %}—{% endif %}
+      </p>
+    </div>
+  </div>
 </div>
 
 <p class="section-heading" style="font-size:1.1rem; font-weight:700; margin:0 0 14px;">Contact</p>
@@ -158,25 +187,25 @@
     <thead>
       <tr>
         <th>Month</th>
-        <th>Amount</th>
-        <th>Payment date</th>
+        <th>Net Salary</th>
+        <th>Paid</th>
+        <th>Due</th>
         <th>Status</th>
-        <th style="width:180px;">Actions</th>
+        <th style="width:220px;">Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for s in salaries %}
       <tr>
         <td style="font-weight:600;">{{ s.salary_month|date:"F Y" }}</td>
-        <td>৳{{ s.amount|floatformat:2 }}</td>
-        <td>{{ s.payment_date|default:"—" }}</td>
-        <td><span class="pill">{{ s.status }}</span></td>
+        <td>৳{{ s.net_salary|floatformat:2 }}</td>
+        <td>৳{{ s.paid_amount|floatformat:2 }}</td>
+        <td>৳{{ s.due_amount|floatformat:2 }}</td>
+        <td><span class="pill">{{ s.get_status_display }}</span></td>
         <td>
           <div class="row-actions">
             <a href="{% url 'admin:core_teachersalary_change' s.pk %}" class="btn btn-ghost btn-sm">Edit</a>
-            {% if s.status == "Paid" %}
-            <a href="{% url 'admin:core_teachersalary_receipt' s.pk %}" target="_blank" class="btn btn-ghost btn-sm">Receipt</a>
-            {% endif %}
+            <a href="{% url 'admin:core_teachersalary_slip' s.pk %}" class="btn btn-ghost btn-sm">Slip</a>
           </div>
         </td>
       </tr>

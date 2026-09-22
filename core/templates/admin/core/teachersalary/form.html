@@ -3,6 +3,25 @@
 {% block title %}{% if instance %}Edit Salary{% else %}Record a Salary{% endif %} — Dashboard{% endblock %}
 {% block crumb %}Teacher Salaries{% endblock %}
 
+{% block extra_head %}
+<style>
+  .calc-summary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 22px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px 20px;
+  }
+  .calc-summary .item { display: flex; flex-direction: column; gap: 2px; }
+  .calc-summary .label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .calc-summary .value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+  .calc-summary .value.due { color: #991B1B; }
+</style>
+{% endblock %}
+
 {% block content %}
 <a href="{% if instance %}{% url 'admin:core_teachersalary_view' instance.pk %}{% else %}{% url 'admin:core_teachersalary_changelist' %}{% endif %}" class="back-link">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
@@ -13,7 +32,7 @@
   <div>
     <h1 class="page-title">{% if instance %}Edit Salary{% else %}Record a Salary{% endif %}</h1>
     {% if locked_teacher %}
-    <p class="page-sub">For {{ locked_teacher.full_name }}</p>
+    <p class="page-sub">For {{ locked_teacher.full_name }}{% if instance.receipt_number %} · {{ instance.receipt_number }}{% endif %}</p>
     {% endif %}
   </div>
 </div>
@@ -24,6 +43,12 @@
     <div class="form-error" style="margin-bottom: 16px;">{{ error }}</div>
     {% endfor %}
   {% endif %}
+
+  <div class="calc-summary" id="calcSummary">
+    <div class="item"><span class="label">Attendance Deduction</span><span class="value" id="calcAttendanceDeduction">৳0.00</span></div>
+    <div class="item"><span class="label">Net Salary</span><span class="value" id="calcNetSalary">৳0.00</span></div>
+    <div class="item"><span class="label">Due Amount</span><span class="value due" id="calcDueAmount">৳0.00</span></div>
+  </div>
 
   <form method="post">
     {% csrf_token %}
@@ -49,15 +74,60 @@
         {% if form.salary_month.errors %}<div class="form-error">{{ form.salary_month.errors.0 }}</div>{% endif %}
       </div>
       <div class="form-field">
-        <label class="form-label" for="{{ form.amount.id_for_label }}">Amount (৳)</label>
-        {{ form.amount }}
-        {% if form.amount.errors %}<div class="form-error">{{ form.amount.errors.0 }}</div>{% endif %}
+        <label class="form-label" for="{{ form.payment_method.id_for_label }}">Payment Method</label>
+        {{ form.payment_method }}
+        {% if form.payment_method.errors %}<div class="form-error">{{ form.payment_method.errors.0 }}</div>{% endif %}
       </div>
 
+      <p class="form-section-label">Pay components</p>
       <div class="form-field">
-        <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
-        {{ form.status }}
-        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+        <label class="form-label" for="{{ form.gross_salary.id_for_label }}">Gross Salary (৳)</label>
+        {{ form.gross_salary }}
+        {% if form.gross_salary.errors %}<div class="form-error">{{ form.gross_salary.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.bonus.id_for_label }}">Bonus (৳)</label>
+        {{ form.bonus }}
+        {% if form.bonus.errors %}<div class="form-error">{{ form.bonus.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.deduction.id_for_label }}">{{ form.deduction.label }} (৳)</label>
+        {{ form.deduction }}
+        <p class="form-help">{{ form.deduction.help_text }}</p>
+        {% if form.deduction.errors %}<div class="form-error">{{ form.deduction.errors.0 }}</div>{% endif %}
+      </div>
+
+      <p class="form-section-label">Attendance for this month</p>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.present_days.id_for_label }}">Present Days</label>
+        {{ form.present_days }}
+        <p class="form-help">{{ form.present_days.help_text }}</p>
+        {% if form.present_days.errors %}<div class="form-error">{{ form.present_days.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.absent_days.id_for_label }}">Absent Days</label>
+        {{ form.absent_days }}
+        <p class="form-help">{{ form.absent_days.help_text }}</p>
+        {% if form.absent_days.errors %}<div class="form-error">{{ form.absent_days.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.late_days.id_for_label }}">Late Days</label>
+        {{ form.late_days }}
+        <p class="form-help">{{ form.late_days.help_text }}</p>
+        {% if form.late_days.errors %}<div class="form-error">{{ form.late_days.errors.0 }}</div>{% endif %}
+      </div>
+
+      <p class="form-section-label">Payment</p>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.paid_amount.id_for_label }}">Paid Amount (৳)</label>
+        {{ form.paid_amount }}
+        {% if form.paid_amount.errors %}<div class="form-error">{{ form.paid_amount.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.transaction_id.id_for_label }}">Transaction ID</label>
+        {{ form.transaction_id }}
+        <p class="form-help">{{ form.transaction_id.help_text }}</p>
+        {% if form.transaction_id.errors %}<div class="form-error">{{ form.transaction_id.errors.0 }}</div>{% endif %}
       </div>
       <div class="form-field">
         <label class="form-label" for="{{ form.payment_date.id_for_label }}">Payment Date</label>
@@ -79,4 +149,42 @@
     </div>
   </form>
 </div>
+
+<script>
+(function () {
+  var ABSENT_RATE = parseFloat('{{ absent_rate|default:"0" }}') || 0;
+  var LATE_RATE = parseFloat('{{ late_rate|default:"0" }}') || 0;
+
+  var grossEl = document.getElementById('{{ form.gross_salary.id_for_label }}');
+  var bonusEl = document.getElementById('{{ form.bonus.id_for_label }}');
+  var deductionEl = document.getElementById('{{ form.deduction.id_for_label }}');
+  var absentEl = document.getElementById('{{ form.absent_days.id_for_label }}');
+  var lateEl = document.getElementById('{{ form.late_days.id_for_label }}');
+  var paidEl = document.getElementById('{{ form.paid_amount.id_for_label }}');
+
+  var attendanceOut = document.getElementById('calcAttendanceDeduction');
+  var netOut = document.getElementById('calcNetSalary');
+  var dueOut = document.getElementById('calcDueAmount');
+
+  function num(el) {
+    var v = parseFloat(el && el.value);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function recalc() {
+    var attendanceDeduction = num(absentEl) * ABSENT_RATE + num(lateEl) * LATE_RATE;
+    var net = num(grossEl) + num(bonusEl) - num(deductionEl) - attendanceDeduction;
+    var due = Math.max(net - num(paidEl), 0);
+
+    attendanceOut.textContent = '৳' + attendanceDeduction.toFixed(2);
+    netOut.textContent = '৳' + net.toFixed(2);
+    dueOut.textContent = '৳' + due.toFixed(2);
+  }
+
+  [grossEl, bonusEl, deductionEl, absentEl, lateEl, paidEl].forEach(function (el) {
+    if (el) el.addEventListener('input', recalc);
+  });
+  recalc();
+})();
+</script>
 {% endblock %}

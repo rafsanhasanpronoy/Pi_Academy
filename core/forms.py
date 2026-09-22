@@ -1,6 +1,7 @@
 from datetime import date
 
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from .models import (
@@ -429,11 +430,23 @@ class StudentPaymentForm(TailwindStyledFormMixin, forms.ModelForm):
 
 
 class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
-    """Used by admin.TeacherSalaryAdmin's custom add/change views."""
+    """Used by admin.TeacherSalaryAdmin's custom add/change views.
+
+    net_salary, due_amount, attendance_deduction, and status are all
+    computed here in save() rather than typed in — see the comments
+    below. receipt_number is generated in admin.py (same pattern as
+    Student.student_code), not here.
+    """
 
     class Meta:
         model = TeacherSalary
-        fields = ["teacher", "salary_month", "amount", "payment_date", "status", "remarks"]
+        fields = [
+            "teacher", "salary_month",
+            "gross_salary", "bonus", "deduction",
+            "present_days", "absent_days", "late_days",
+            "payment_method", "paid_amount", "transaction_id",
+            "payment_date", "remarks",
+        ]
         widgets = {
             "salary_month": forms.DateInput(attrs={"type": "month"}, format="%Y-%m"),
             "payment_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -447,14 +460,29 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
 
         self.fields["teacher"].empty_label = "Select a faculty member"
         self.fields["payment_date"].required = False
-        self.fields["payment_date"].help_text = "Set this once the salary is actually paid out."
+        self.fields["payment_date"].help_text = "Set this once at least part of the salary has been paid out."
         self.fields["remarks"].required = False
+        self.fields["transaction_id"].required = False
+        self.fields["transaction_id"].help_text = "Bank/mobile-wallet transaction reference, if applicable."
+
+        self.fields["bonus"].required = False
+        self.fields["deduction"].required = False
+        self.fields["deduction"].label = "Other deductions"
+        self.fields["deduction"].help_text = "Anything besides attendance — an advance, a fine, etc."
+        self.fields["paid_amount"].required = False
+
+        for name in ("present_days", "absent_days", "late_days"):
+            self.fields[name].required = False
+            self.fields[name].widget.attrs.setdefault("min", 0)
+        self.fields["present_days"].help_text = "Manual entry — this project doesn't track teacher attendance automatically."
+        self.fields["absent_days"].help_text = f"Deducted at ৳{settings.ABSENT_DEDUCTION_PER_DAY}/day."
+        self.fields["late_days"].help_text = f"Deducted at ৳{settings.LATE_DEDUCTION_PER_DAY}/day."
 
         if not self.instance.pk:
             # Every faculty member is on the same fixed monthly rate for
             # now — pre-fill it but leave it editable, since that won't
             # always be true (a raise, a part-time rate, etc).
-            self.fields["amount"].initial = 15000
+            self.fields["gross_salary"].initial = 15000
 
         # Arriving from a specific faculty member's "Record Salary" link
         # (or the Monthly Salary Status report), the teacher is already
@@ -466,12 +494,33 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
 
         self._style_fields()
 
+    # These six fields are all required=False above for a nicer form (an
+    # admin shouldn't have to type "0" into Bonus just to leave it out),
+    # but the DB columns are NOT NULL with default=0 — an empty submission
+    # otherwise becomes None here and crashes instance.save() with a raw
+    # IntegrityError instead of a clean validation message.
+    def clean_bonus(self):
+        return self.cleaned_data.get("bonus") or 0
+
+    def clean_deduction(self):
+        return self.cleaned_data.get("deduction") or 0
+
+    def clean_paid_amount(self):
+        return self.cleaned_data.get("paid_amount") or 0
+
+    def clean_present_days(self):
+        return self.cleaned_data.get("present_days") or 0
+
+    def clean_absent_days(self):
+        return self.cleaned_data.get("absent_days") or 0
+
+    def clean_late_days(self):
+        return self.cleaned_data.get("late_days") or 0
+
     def clean(self):
         cleaned_data = super().clean()
         teacher = cleaned_data.get("teacher")
         salary_month = cleaned_data.get("salary_month")
-        status = cleaned_data.get("status")
-        payment_date = cleaned_data.get("payment_date")
 
         # Mirrors the DB's unique_together(teacher, salary_month) with a
         # clear inline message instead of a raw IntegrityError.
@@ -485,10 +534,53 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
                     f"{salary_month:%B %Y}."
                 )
 
-        if status == "Paid" and not payment_date:
-            raise ValidationError("Please set a payment date for a salary marked Paid.")
+        gross_salary = cleaned_data.get("gross_salary") or 0
+        bonus = cleaned_data.get("bonus") or 0
+        deduction = cleaned_data.get("deduction") or 0
+        absent_days = cleaned_data.get("absent_days") or 0
+        late_days = cleaned_data.get("late_days") or 0
+        paid_amount = cleaned_data.get("paid_amount") or 0
+
+        attendance_deduction = (
+            absent_days * settings.ABSENT_DEDUCTION_PER_DAY
+            + late_days * settings.LATE_DEDUCTION_PER_DAY
+        )
+        net_salary = gross_salary + bonus - deduction - attendance_deduction
+
+        if paid_amount > net_salary:
+            raise ValidationError(
+                f"Paid amount (৳{paid_amount}) can't exceed net salary (৳{net_salary})."
+            )
 
         return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        instance.attendance_deduction = (
+            (instance.absent_days or 0) * settings.ABSENT_DEDUCTION_PER_DAY
+            + (instance.late_days or 0) * settings.LATE_DEDUCTION_PER_DAY
+        )
+        instance.net_salary = (
+            (instance.gross_salary or 0) + (instance.bonus or 0)
+            - (instance.deduction or 0) - instance.attendance_deduction
+        )
+        instance.due_amount = max(instance.net_salary - (instance.paid_amount or 0), 0)
+
+        if instance.net_salary > 0 and instance.due_amount <= 0:
+            instance.status = "Paid"
+        elif instance.paid_amount and instance.paid_amount > 0:
+            instance.status = "Partial"
+        else:
+            instance.status = "Pending"
+
+        # Keep the legacy flat `amount` column in sync for anything that
+        # might still read it, without exposing it in the form.
+        instance.amount = instance.net_salary
+
+        if commit:
+            instance.save()
+        return instance
 
 
 class ExamForm(TailwindStyledFormMixin, forms.ModelForm):

@@ -196,6 +196,16 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Payroll: per-day salary deduction for teacher attendance. There's no
+# teacher attendance-tracking table in this schema (Attendance only
+# tracks students, per batch) — so present/absent/late days are entered
+# manually on each salary record, and these rates turn that into a
+# deduction amount. ABSENT_DEDUCTION_PER_DAY defaults to the 300tk/day
+# rate requested; LATE_DEDUCTION_PER_DAY defaults to half that — adjust
+# either to whatever your actual policy is.
+ABSENT_DEDUCTION_PER_DAY = env.int("ABSENT_DEDUCTION_PER_DAY", default=300)
+LATE_DEDUCTION_PER_DAY = env.int("LATE_DEDUCTION_PER_DAY", default=150)
+
 
 # Production security settings
 # https://docs.djangoproject.com/en/5.2/topics/security/

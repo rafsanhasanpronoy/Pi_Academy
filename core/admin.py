@@ -4,6 +4,7 @@ from io import BytesIO
 
 from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
@@ -399,11 +400,18 @@ class FacultyAdmin(admin.ModelAdmin):
             TeacherSalary.objects.filter(teacher=instance)
             .order_by("-salary_month")
         )
+        salary_summary = salaries.aggregate(
+            total_paid=Sum("paid_amount"),
+            current_due=Sum("due_amount"),
+        )
         context = dict(
             self.admin_site.each_context(request),
             instance=instance,
             schedule=schedule,
             salaries=salaries,
+            total_paid=salary_summary["total_paid"] or 0,
+            current_due=salary_summary["current_due"] or 0,
+            latest_salary=salaries.first(),
             active_section="faculty",
             active_page="faculty_view",
             opts=self.model._meta,
@@ -667,6 +675,23 @@ def _generate_student_code(class_obj, batch):
         seq += 1
         code = f"{prefix}{seq:03d}"
     return code
+
+
+def _generate_receipt_number():
+    """
+    Builds receipt numbers like SAL-2026-00001 — sequential within the
+    current calendar year, never reused. Staff never type this in; it's
+    only ever set once, when a salary record is first created.
+    """
+    year = timezone.localdate().year
+    prefix = f"SAL-{year}-"
+    seq = TeacherSalary.objects.filter(receipt_number__startswith=prefix).count() + 1
+    receipt_number = f"{prefix}{seq:05d}"
+
+    while TeacherSalary.objects.filter(receipt_number=receipt_number).exists():
+        seq += 1
+        receipt_number = f"{prefix}{seq:05d}"
+    return receipt_number
 
 
 # Column headers for the bulk student enrollment template — order matters,
@@ -1998,37 +2023,83 @@ class StudentPaymentAdmin(admin.ModelAdmin):
 @admin.register(TeacherSalary)
 class TeacherSalaryAdmin(admin.ModelAdmin):
     list_display = (
+        "receipt_number",
         "teacher",
         "salary_month",
-        "amount",
-        "payment_date",
+        "gross_salary",
+        "net_salary",
+        "paid_amount",
+        "due_amount",
+        "payment_method",
         "status",
-        "receipt_link",
     )
 
     list_filter = (
         "status",
+        "payment_method",
         "salary_month",
-        "payment_date",
     )
 
     date_hierarchy = "salary_month"
 
     search_fields = (
         "teacher__full_name",
+        "receipt_number",
     )
 
     autocomplete_fields = ("teacher",)
 
     # ------------------------------------------------------------------
-    # Receipt link column on the changelist
+    # Shared filtering — used by the changelist, the dashboard cards,
+    # and the Excel export, so all three always agree with each other.
     # ------------------------------------------------------------------
-    def receipt_link(self, obj):
-        if obj.status != "Paid":
-            return "—"
-        url = reverse("admin:core_teachersalary_receipt", args=[obj.pk])
-        return format_html('<a href="{}" target="_blank">View receipt</a>', url)
-    receipt_link.short_description = "Receipt"
+    def _filtered_salaries(self, request):
+        salaries = TeacherSalary.objects.select_related("teacher").order_by("-salary_month", "-id")
+
+        query = request.GET.get("q", "").strip()
+        if query:
+            salaries = salaries.filter(
+                Q(teacher__full_name__icontains=query) | Q(receipt_number__icontains=query)
+            )
+
+        active_status = request.GET.get("status", "").strip()
+        if active_status:
+            salaries = salaries.filter(status=active_status)
+
+        active_method = request.GET.get("method", "").strip()
+        if active_method:
+            salaries = salaries.filter(payment_method=active_method)
+
+        month_param = request.GET.get("month", "").strip()
+        if month_param:
+            try:
+                month_date = datetime.strptime(month_param, "%Y-%m").date()
+                salaries = salaries.filter(
+                    salary_month__year=month_date.year, salary_month__month=month_date.month
+                )
+            except ValueError:
+                month_param = ""
+
+        return salaries, query, active_status, active_method, month_param
+
+    def _dashboard_cards(self, salaries):
+        """One aggregate query for the money totals, one count query for
+        teacher headcount — no N+1s regardless of how many rows match."""
+        totals = salaries.aggregate(
+            total_salary=Sum("net_salary"),
+            paid_amount=Sum("paid_amount"),
+            due_amount=Sum("due_amount"),
+            paid_count=Count("id", filter=Q(status="Paid")),
+            pending_count=Count("id", filter=Q(status__in=("Pending", "Partial"))),
+        )
+        return {
+            "total_teachers": Faculty.objects.count(),
+            "paid_count": totals["paid_count"] or 0,
+            "pending_count": totals["pending_count"] or 0,
+            "total_salary": totals["total_salary"] or 0,
+            "paid_amount": totals["paid_amount"] or 0,
+            "due_amount": totals["due_amount"] or 0,
+        }
 
     # ------------------------------------------------------------------
     # Same pattern as StudentPaymentAdmin: same admin URLs, custom
@@ -2037,18 +2108,8 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         if not self.has_view_permission(request):
             raise PermissionDenied
-        salaries = TeacherSalary.objects.select_related("teacher").order_by("-salary_month")
-
-        query = request.GET.get("q", "").strip()
-        if query:
-            salaries = salaries.filter(teacher__full_name__icontains=query)
-
-        active_status = request.GET.get("status", "").strip()
-        if active_status:
-            salaries = salaries.filter(status=active_status)
-
-        total_count = salaries.count()
-        total_amount = salaries.aggregate(total=Sum("amount"))["total"] or 0
+        salaries, query, active_status, active_method, month_param = self._filtered_salaries(request)
+        cards = self._dashboard_cards(salaries)
 
         paginator = Paginator(salaries, 15)
         page_obj = paginator.get_page(request.GET.get("page"))
@@ -2063,10 +2124,12 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             page_obj=page_obj,
             page_range=_pagination_range(page_obj.number, paginator.num_pages),
             preserved_querystring=preserved_querystring,
-            total_count=total_count,
-            total_amount=total_amount,
+            cards=cards,
             status_choices=TeacherSalary._meta.get_field("status").choices,
+            method_choices=TeacherSalary.PAYMENT_METHODS,
             active_status=active_status,
+            active_method=active_method,
+            month_param=month_param,
             search_query=query,
             active_section="finance",
             active_page="teachersalary_list",
@@ -2083,9 +2146,19 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
                 name="core_teachersalary_monthly_status",
             ),
             path(
+                "export/",
+                self.admin_site.admin_view(self.export_view),
+                name="core_teachersalary_export",
+            ),
+            path(
                 "<int:salary_id>/receipt/",
                 self.admin_site.admin_view(self.receipt_view),
                 name="core_teachersalary_receipt",
+            ),
+            path(
+                "<int:salary_id>/slip/",
+                self.admin_site.admin_view(self.slip_view),
+                name="core_teachersalary_slip",
             ),
             path(
                 "<path:object_id>/view/",
@@ -2143,6 +2216,10 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
                 salary = form.save(commit=False)
                 if locked_teacher is not None:
                     salary.teacher = locked_teacher
+                if not instance:
+                    # Only generate a receipt number for brand-new
+                    # records — never regenerate one on edit.
+                    salary.receipt_number = _generate_receipt_number()
                 salary.save()
                 self.message_user(
                     request,
@@ -2165,6 +2242,8 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             form=form,
             instance=instance,
             locked_teacher=locked_teacher,
+            absent_rate=settings.ABSENT_DEDUCTION_PER_DAY,
+            late_rate=settings.LATE_DEDUCTION_PER_DAY,
             active_section="finance",
             active_page="teachersalary_edit" if instance else "teachersalary_add",
             opts=self.model._meta,
@@ -2201,13 +2280,12 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
 
         teachers = Faculty.objects.all().order_by("full_name")
 
-        salaries_by_teacher = {
-            s.teacher_id: s
-            for s in TeacherSalary.objects.filter(
-                salary_month__year=target_month.year,
-                salary_month__month=target_month.month,
-            )
-        }
+        month_salaries = TeacherSalary.objects.filter(
+            salary_month__year=target_month.year,
+            salary_month__month=target_month.month,
+        )
+        salaries_by_teacher = {s.teacher_id: s for s in month_salaries}
+        cards = self._dashboard_cards(month_salaries)
 
         rows = []
         paid_count = 0
@@ -2250,6 +2328,7 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             self.admin_site.each_context(request),
             title="Monthly Salary Status",
             rows=rows,
+            cards=cards,
             target_month=target_month,
             target_month_label=target_month.strftime("%B %Y"),
             prev_month=prev_month.strftime("%Y-%m"),
@@ -2279,6 +2358,153 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             "generated_at": timezone.localtime(),
         }
         return TemplateResponse(request, "admin/core/salary_receipt.html", context)
+
+    def export_view(self, request):
+        """'Export Salary Report' — an XLSX of whatever's currently
+        filtered on the changelist (status/method/month/search)."""
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        salaries, _, _, _, month_param = self._filtered_salaries(request)
+
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Salary Report"
+        headers = [
+            "Teacher", "Month", "Gross Salary", "Bonus", "Deduction",
+            "Net Salary", "Paid Amount", "Due Amount", "Payment Method", "Status",
+        ]
+        sheet.append(headers)
+        for col_idx in range(1, len(headers) + 1):
+            sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 20
+
+        for s in salaries:
+            sheet.append([
+                s.teacher.full_name,
+                s.salary_month.strftime("%B %Y"),
+                float(s.gross_salary),
+                float(s.bonus),
+                float(s.deduction + s.attendance_deduction),
+                float(s.net_salary),
+                float(s.paid_amount),
+                float(s.due_amount),
+                s.get_payment_method_display(),
+                s.get_status_display(),
+            ])
+
+        if month_param:
+            filename_suffix = month_param.replace("-", "_")
+        else:
+            filename_suffix = timezone.localdate().strftime("%Y_%m")
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="salary_report_{filename_suffix}.xlsx"'
+        workbook.save(response)
+        return response
+
+    def slip_view(self, request, salary_id):
+        """'Generate Salary Slip' — a downloadable PDF via ReportLab."""
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        salary = get_object_or_404(
+            TeacherSalary.objects.select_related("teacher"), pk=salary_id
+        )
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            topMargin=22 * mm, bottomMargin=22 * mm,
+            leftMargin=20 * mm, rightMargin=20 * mm,
+        )
+        brand = colors.HexColor("#4e6933")
+        muted = colors.HexColor("#6B7280")
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "SlipTitle", parent=styles["Heading1"], fontSize=18, textColor=brand, spaceAfter=2,
+        )
+        sub_style = ParagraphStyle(
+            "SlipSub", parent=styles["Normal"], fontSize=9, textColor=muted,
+        )
+        section_style = ParagraphStyle(
+            "SlipSection", parent=styles["Heading3"], fontSize=11, textColor=brand,
+            spaceBefore=14, spaceAfter=6,
+        )
+        right_style = ParagraphStyle("SlipRight", parent=styles["Normal"], alignment=TA_RIGHT)
+
+        elements = [
+            Paragraph("Pi - π Academy", title_style),
+            Paragraph("Salary Slip", sub_style),
+            Spacer(1, 14),
+        ]
+
+        meta_rows = [
+            ["Receipt Number", salary.receipt_number or "—"],
+            ["Teacher", salary.teacher.full_name],
+            ["Salary Month", salary.salary_month.strftime("%B %Y")],
+            ["Payment Method", salary.get_payment_method_display()],
+            ["Transaction ID", salary.transaction_id or "—"],
+            ["Payment Date", salary.payment_date.strftime("%d %b %Y") if salary.payment_date else "—"],
+            ["Status", salary.get_status_display()],
+        ]
+        meta_table = Table(meta_rows, colWidths=[60 * mm, 95 * mm])
+        meta_table.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+            ("TEXTCOLOR", (0, 0), (0, -1), muted),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ]))
+        elements.append(meta_table)
+        elements.append(Paragraph("Salary Breakdown", section_style))
+
+        breakdown_rows = [
+            ["Item", "Amount (৳)"],
+            ["Gross Salary", f"{salary.gross_salary:,.2f}"],
+            ["Bonus", f"{salary.bonus:,.2f}"],
+            ["Other Deductions", f"{salary.deduction:,.2f}"],
+            ["Attendance Deduction", f"{salary.attendance_deduction:,.2f}"],
+            ["Net Salary", f"{salary.net_salary:,.2f}"],
+            ["Paid Amount", f"{salary.paid_amount:,.2f}"],
+            ["Due Amount", f"{salary.due_amount:,.2f}"],
+        ]
+        breakdown_table = Table(breakdown_rows, colWidths=[95 * mm, 60 * mm])
+        breakdown_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), brand),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, -3), (-1, -3), "Helvetica-Bold"),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+            ("LINEABOVE", (0, -3), (-1, -3), 1, brand),
+        ]))
+        elements.append(breakdown_table)
+        elements.append(Spacer(1, 24))
+        elements.append(Paragraph(
+            "This is a computer-generated salary slip and does not require a signature.",
+            ParagraphStyle("Footer", parent=styles["Normal"], fontSize=8, textColor=muted, alignment=TA_CENTER),
+        ))
+
+        doc.build(elements)
+        buffer.seek(0)
+
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        filename = f"salary-slip-{salary.receipt_number or salary.pk}.pdf"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 @admin.register(Achievement)

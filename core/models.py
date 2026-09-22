@@ -405,13 +405,47 @@ class Subject(models.Model):
 
 
 class TeacherSalary(models.Model):
+    PAYMENT_METHODS = [
+        ("Cash", "Cash"),
+        ("Bank", "Bank Transfer"),
+        ("Bkash", "bKash"),
+        ("Nagad", "Nagad"),
+    ]
+
     id = models.BigAutoField(primary_key=True)
     teacher = models.ForeignKey(Faculty, models.DO_NOTHING)
     salary_month = models.DateField()
+
+    # Legacy flat amount, kept untouched for old records and any code
+    # still reading it. New records keep it in sync with net_salary
+    # (see TeacherSalaryForm.save) but it's no longer edited directly.
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+
+    receipt_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # "Other" deductions only (manual, e.g. an advance) — attendance-based
+    # deductions are tracked separately below so re-editing a record never
+    # double-applies them.
+    deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    present_days = models.PositiveIntegerField(default=0, blank=True)
+    absent_days = models.PositiveIntegerField(default=0, blank=True)
+    late_days = models.PositiveIntegerField(default=0, blank=True)
+    attendance_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    due_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="Cash")
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+
     payment_date = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=[
         ('Pending', 'Pending'),
+        ('Partial', 'Partially Paid'),
         ('Paid', 'Paid'),
     ], default='Pending')
     remarks = models.TextField(blank=True, null=True)
