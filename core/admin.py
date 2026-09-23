@@ -2411,14 +2411,14 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.platypus import (
+        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
+        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
             SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
         )
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
