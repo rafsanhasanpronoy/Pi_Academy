@@ -1,0 +1,93 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}Mark Attendance — Dashboard{% endblock %}
+{% block crumb %}Mark Attendance{% endblock %}
+
+{% block extra_head %}
+<style>
+  .attend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .attend-row:last-child { border-bottom: none; }
+  .attend-name { font-weight: 600; min-width: 180px; }
+  .attend-remarks {
+    flex: 1;
+    min-width: 180px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_facultyattendance_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  Back to Attendance History
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Mark Attendance</h1>
+    <p class="page-sub">{{ marked_count }} of {{ total_teachers }} faculty marked for {{ target_date|date:"d M Y" }}</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_facultyattendance_mark' %}?date={{ prev_date }}" class="btn btn-ghost">&larr; {{ prev_date }}</a>
+    {% if target_date|date:"Y-m-d" != today %}
+    <a href="{% url 'admin:core_facultyattendance_mark' %}?date={{ today }}" class="btn btn-ghost">Today</a>
+    {% endif %}
+    <a href="{% url 'admin:core_facultyattendance_mark' %}?date={{ next_date }}" class="btn btn-ghost">{{ next_date }} &rarr;</a>
+  </div>
+</div>
+
+<div class="panel" style="padding: 18px 22px; margin-bottom: 20px;">
+  <form method="get" style="display:flex; gap:12px; align-items:flex-end;">
+    <div>
+      <label class="form-label" for="id_date">Date</label>
+      <input type="date" id="id_date" name="date" value="{{ target_date|date:'Y-m-d' }}">
+    </div>
+    <button type="submit" class="btn btn-accent btn-sm">Go</button>
+  </form>
+</div>
+
+<div class="panel form-card">
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="attendance_date" value="{{ target_date|date:'Y-m-d' }}">
+
+    {% if rows %}
+    {% for row in rows %}
+    <div class="attend-row">
+      <div class="attend-name">{{ row.teacher.full_name }}</div>
+      <div class="radio-group">
+        <input type="radio" name="status__{{ row.teacher.id }}" value="Present" id="present_{{ row.teacher.id }}" {% if row.record.status == "Present" %}checked{% endif %}>
+        <label for="present_{{ row.teacher.id }}">Present</label>
+        <input type="radio" name="status__{{ row.teacher.id }}" value="Late" id="late_{{ row.teacher.id }}" {% if row.record.status == "Late" %}checked{% endif %}>
+        <label for="late_{{ row.teacher.id }}">Late</label>
+        <input type="radio" name="status__{{ row.teacher.id }}" value="Absent" id="absent_{{ row.teacher.id }}" {% if row.record.status == "Absent" %}checked{% endif %}>
+        <label for="absent_{{ row.teacher.id }}">Absent</label>
+      </div>
+      <input
+        type="text"
+        name="remarks__{{ row.teacher.id }}"
+        value="{{ row.record.remarks|default:'' }}"
+        placeholder="Remarks (optional)"
+        class="attend-remarks w-full border border-ink/15 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink/40 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+      >
+    </div>
+    {% endfor %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">Save Attendance</button>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No faculty members to mark yet. Add faculty first.</p>
+    </div>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

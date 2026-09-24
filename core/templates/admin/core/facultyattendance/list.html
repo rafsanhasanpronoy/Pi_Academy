@@ -1,0 +1,168 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}Faculty Attendance — Dashboard{% endblock %}
+{% block crumb %}Faculty Attendance{% endblock %}
+
+{% block extra_head %}
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+  }
+  .stat-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 4px;
+  }
+  .stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text); line-height: 1.1; }
+  .status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .status-badge.present { background: #DCFCE7; color: #166534; }
+  .status-badge.late { background: #FFEDD5; color: #9A3412; }
+  .status-badge.absent { background: #FEE2E2; color: #991B1B; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Faculty Attendance</h1>
+    <p class="page-sub">Day-by-day attendance history for every faculty member</p>
+  </div>
+  <a href="{% url 'admin:core_facultyattendance_mark' %}" class="btn btn-accent">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
+    Mark Attendance
+  </a>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <p class="stat-label">Total Teachers</p>
+    <p class="stat-value">{{ cards.total_teachers }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Present</p>
+    <p class="stat-value">{{ cards.present_count }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Late</p>
+    <p class="stat-value">{{ cards.late_count }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Absent</p>
+    <p class="stat-value">{{ cards.absent_count }}</p>
+  </div>
+</div>
+
+<div class="panel" style="padding: 18px 22px; margin-bottom: 20px;">
+  <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+    <div style="flex: 2; min-width: 200px;">
+      <label class="form-label" for="id_q">Search</label>
+      <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Teacher name">
+    </div>
+    <div style="flex: 1; min-width: 150px;">
+      <label class="form-label" for="id_teacher">Teacher</label>
+      <select id="id_teacher" name="teacher">
+        <option value="">All faculty</option>
+        {% for teacher in teachers %}
+        <option value="{{ teacher.id }}" {% if active_teacher_id == teacher.id|stringformat:"s" %}selected{% endif %}>{{ teacher.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 150px;">
+      <label class="form-label" for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="">All statuses</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if active_status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 150px;">
+      <label class="form-label" for="id_month">Month</label>
+      <input type="month" id="id_month" name="month" value="{{ month_param }}">
+    </div>
+    <div class="row-actions">
+      <button type="submit" class="btn btn-accent btn-sm">Filter</button>
+      <a href="{% url 'admin:core_facultyattendance_changelist' %}" class="btn btn-ghost btn-sm">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  {% if records %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Teacher</th>
+        <th>Status</th>
+        <th>Remarks</th>
+        <th style="width:120px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for record in records %}
+      <tr>
+        <td>{{ record.attendance_date|date:"d M Y" }}</td>
+        <td style="font-weight:600;">{{ record.teacher.full_name }}</td>
+        <td>
+          <span class="status-badge {% if record.status == 'Present' %}present{% elif record.status == 'Late' %}late{% else %}absent{% endif %}">
+            {{ record.status }}
+          </span>
+        </td>
+        <td>{{ record.remarks|default:"—" }}</td>
+        <td>
+          <form method="post" action="{% url 'admin:core_facultyattendance_delete' record.pk %}" onsubmit="return confirm('Delete this attendance record?');" style="margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
+    <p>No attendance records match these filters.</p>
+    <a href="{% url 'admin:core_facultyattendance_mark' %}" class="btn btn-accent btn-sm" style="margin-top:10px;">Mark Attendance</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="row-actions" style="justify-content:center; margin-top:22px;">
+  {% if page_obj.has_previous %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  {% for p in page_range %}
+    {% if p %}
+      <a class="btn {% if p == page_obj.number %}btn-accent{% else %}btn-ghost{% endif %} btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ p }}">{{ p }}</a>
+    {% else %}
+      <span style="padding: 0 4px; color: var(--muted);">&hellip;</span>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

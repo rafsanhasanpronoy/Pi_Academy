@@ -115,6 +115,28 @@ class Attendance(models.Model):
         return f"{self.student} — {self.attendance_date} ({self.status})"
 
 
+class FacultyAttendance(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    teacher = models.ForeignKey('Faculty', models.DO_NOTHING)
+    attendance_date = models.DateField()
+    status = models.CharField(max_length=20, choices=[
+        ('Present', 'Present'),
+        ('Absent', 'Absent'),
+        ('Late', 'Late'),
+    ])
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'faculty_attendance'
+        unique_together = (('teacher', 'attendance_date'),)
+        verbose_name = 'Faculty Attendance Record'
+        verbose_name_plural = 'Faculty Attendance Records'
+
+    def __str__(self):
+        return f"{self.teacher} — {self.attendance_date} ({self.status})"
+
+
 class Batch(models.Model):
     id = models.BigAutoField(primary_key=True)
     class_obj = models.ForeignKey('Class', models.DO_NOTHING, db_column='class_id')

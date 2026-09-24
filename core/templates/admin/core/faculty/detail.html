@@ -71,6 +71,10 @@
     </div>
   </div>
   <div class="row-actions">
+    <a href="{% url 'admin:core_facultyattendance_changelist' %}?teacher={{ instance.id }}" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
+      View Attendance
+    </a>
     <a href="{% url 'admin:core_teachersalary_add' %}?teacher={{ instance.id }}" class="btn btn-ghost">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       Record Salary

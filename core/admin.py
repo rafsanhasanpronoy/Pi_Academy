@@ -34,6 +34,7 @@ from .models import (
     Student,
     ClassSchedule,
     Attendance,
+    FacultyAttendance,
     Exam,
     ExamResult,
     StudentPayment,
@@ -1286,6 +1287,180 @@ class AttendanceAdmin(admin.ModelAdmin):
     autocomplete_fields = ("student", "batch")
 
 
+@admin.register(FacultyAttendance)
+class FacultyAttendanceAdmin(admin.ModelAdmin):
+    """
+    Deliberately not the plain one-row-at-a-time pattern AttendanceAdmin
+    (student attendance) uses above — marking 10-15 teachers individually
+    every day would be painful. Instead this has one "Mark Attendance"
+    page per day: every faculty member listed at once, a status radio
+    each, submitted together. Editing a past date re-opens the same page
+    pre-filled and re-submits (an upsert), so there's no separate
+    add/change form.
+    """
+
+    search_fields = ("teacher__full_name",)
+
+    def _filtered_records(self, request):
+        records = FacultyAttendance.objects.select_related("teacher").order_by(
+            "-attendance_date", "teacher__full_name"
+        )
+
+        query = request.GET.get("q", "").strip()
+        if query:
+            records = records.filter(teacher__full_name__icontains=query)
+
+        active_status = request.GET.get("status", "").strip()
+        if active_status:
+            records = records.filter(status=active_status)
+
+        teacher_id = request.GET.get("teacher", "").strip()
+        if teacher_id:
+            records = records.filter(teacher_id=teacher_id)
+
+        month_param = request.GET.get("month", "").strip()
+        if month_param:
+            try:
+                month_date = datetime.strptime(month_param, "%Y-%m").date()
+                records = records.filter(
+                    attendance_date__year=month_date.year,
+                    attendance_date__month=month_date.month,
+                )
+            except ValueError:
+                month_param = ""
+
+        return records, query, active_status, teacher_id, month_param
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        records, query, active_status, teacher_id, month_param = self._filtered_records(request)
+
+        summary = records.aggregate(
+            present_count=Count("id", filter=Q(status="Present")),
+            absent_count=Count("id", filter=Q(status="Absent")),
+            late_count=Count("id", filter=Q(status="Late")),
+        )
+
+        paginator = Paginator(records, 25)
+        page_obj = paginator.get_page(request.GET.get("page"))
+
+        preserved_params = request.GET.copy()
+        preserved_params.pop("page", None)
+        preserved_querystring = preserved_params.urlencode()
+
+        context = dict(
+            self.admin_site.each_context(request),
+            records=page_obj,
+            page_obj=page_obj,
+            page_range=_pagination_range(page_obj.number, paginator.num_pages),
+            preserved_querystring=preserved_querystring,
+            cards={
+                "total_teachers": Faculty.objects.count(),
+                "present_count": summary["present_count"] or 0,
+                "absent_count": summary["absent_count"] or 0,
+                "late_count": summary["late_count"] or 0,
+            },
+            teachers=Faculty.objects.order_by("full_name"),
+            status_choices=FacultyAttendance._meta.get_field("status").choices,
+            active_status=active_status,
+            active_teacher_id=teacher_id,
+            month_param=month_param,
+            search_query=query,
+            active_section="faculty",
+            active_page="facultyattendance_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/facultyattendance/list.html", context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "mark/",
+                self.admin_site.admin_view(self.mark_view),
+                name="core_facultyattendance_mark",
+            ),
+        ]
+        return custom_urls + urls
+
+    def mark_view(self, request):
+        if not (self.has_add_permission(request) and self.has_change_permission(request)):
+            raise PermissionDenied
+
+        date_param = request.POST.get("attendance_date") or request.GET.get("date")
+        if date_param:
+            try:
+                target_date = datetime.strptime(date_param, "%Y-%m-%d").date()
+            except ValueError:
+                target_date = timezone.localdate()
+        else:
+            target_date = timezone.localdate()
+
+        teachers = Faculty.objects.order_by("full_name")
+
+        if request.method == "POST":
+            saved_count = 0
+            for teacher in teachers:
+                status = request.POST.get(f"status__{teacher.id}", "").strip()
+                if not status:
+                    # No radio selected for this teacher today — leave
+                    # them unmarked rather than forcing a default; staff
+                    # can come back and fill it in later.
+                    continue
+                remarks = request.POST.get(f"remarks__{teacher.id}", "").strip()
+                FacultyAttendance.objects.update_or_create(
+                    teacher=teacher,
+                    attendance_date=target_date,
+                    defaults={"status": status, "remarks": remarks},
+                )
+                saved_count += 1
+
+            self.message_user(
+                request,
+                f"Attendance saved for {saved_count} of {teachers.count()} faculty on "
+                f"{target_date:%d %b %Y}.",
+                level=messages.SUCCESS,
+            )
+            return redirect(f"{reverse('admin:core_facultyattendance_mark')}?date={target_date:%Y-%m-%d}")
+
+        existing = {
+            record.teacher_id: record
+            for record in FacultyAttendance.objects.filter(attendance_date=target_date)
+        }
+        rows = [
+            {"teacher": teacher, "record": existing.get(teacher.id)}
+            for teacher in teachers
+        ]
+
+        prev_date = target_date - timedelta(days=1)
+        next_date = target_date + timedelta(days=1)
+
+        context = dict(
+            self.admin_site.each_context(request),
+            rows=rows,
+            target_date=target_date,
+            prev_date=prev_date.strftime("%Y-%m-%d"),
+            next_date=next_date.strftime("%Y-%m-%d"),
+            today=timezone.localdate().strftime("%Y-%m-%d"),
+            marked_count=len(existing),
+            total_teachers=teachers.count(),
+            active_section="faculty",
+            active_page="facultyattendance_mark",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/facultyattendance/mark.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(FacultyAttendance, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Attendance record deleted.", level=messages.SUCCESS)
+        return redirect("admin:core_facultyattendance_changelist")
+
+
 @admin.register(Exam)
 class ExamAdmin(admin.ModelAdmin):
     list_display = (
@@ -2411,31 +2586,14 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        try:
-            import importlib
-
-            colors = importlib.import_module("reportlab.lib.colors")
-            pagesizes = importlib.import_module("reportlab.lib.pagesizes")
-            units = importlib.import_module("reportlab.lib.units")
-            platypus = importlib.import_module("reportlab.platypus")
-            styles_module = importlib.import_module("reportlab.lib.styles")
-            enums = importlib.import_module("reportlab.lib.enums")
-        except ImportError as exc:
-            raise DjangoValidationError(
-                "PDF generation requires the ReportLab package."
-            ) from exc
-
-        A4 = pagesizes.A4
-        mm = units.mm
-        SimpleDocTemplate = platypus.SimpleDocTemplate
-        Table = platypus.Table
-        TableStyle = platypus.TableStyle
-        Paragraph = platypus.Paragraph
-        Spacer = platypus.Spacer
-        getSampleStyleSheet = styles_module.getSampleStyleSheet
-        ParagraphStyle = styles_module.ParagraphStyle
-        TA_RIGHT = enums.TA_RIGHT
-        TA_CENTER = enums.TA_CENTER
+        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
+        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
+            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
