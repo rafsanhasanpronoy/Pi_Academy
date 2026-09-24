@@ -1381,8 +1381,70 @@ class FacultyAttendanceAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.mark_view),
                 name="core_facultyattendance_mark",
             ),
+            path(
+                "monthly-summary/",
+                self.admin_site.admin_view(self.monthly_summary_view),
+                name="core_facultyattendance_monthly_summary",
+            ),
         ]
         return custom_urls + urls
+
+    def monthly_summary_view(self, request):
+        """Answers 'how many days was each teacher present/absent/late
+        this month, and how many classes did they take in total' — the
+        numbers Teacher Salaries' Classes Taken field is meant to match."""
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
+        month_param = request.GET.get("month")
+        if month_param:
+            try:
+                target_month = datetime.strptime(month_param, "%Y-%m").date().replace(day=1)
+            except ValueError:
+                target_month = timezone.localdate().replace(day=1)
+        else:
+            target_month = timezone.localdate().replace(day=1)
+
+        prev_month = (target_month - timedelta(days=1)).replace(day=1)
+        next_month_probe = target_month.replace(day=28) + timedelta(days=4)
+        next_month = next_month_probe.replace(day=1)
+
+        month_records = FacultyAttendance.objects.filter(
+            attendance_date__year=target_month.year,
+            attendance_date__month=target_month.month,
+        )
+
+        rows = []
+        for teacher in Faculty.objects.order_by("full_name"):
+            teacher_records = month_records.filter(teacher=teacher)
+            summary = teacher_records.aggregate(
+                present_days=Count("id", filter=Q(status="Present")),
+                late_days=Count("id", filter=Q(status="Late")),
+                absent_days=Count("id", filter=Q(status="Absent")),
+                total_classes=Sum("classes_taken"),
+            )
+            rows.append({
+                "teacher": teacher,
+                "present_days": summary["present_days"] or 0,
+                "late_days": summary["late_days"] or 0,
+                "absent_days": summary["absent_days"] or 0,
+                "total_classes": summary["total_classes"] or 0,
+            })
+
+        context = dict(
+            self.admin_site.each_context(request),
+            rows=rows,
+            target_month=target_month,
+            target_month_label=target_month.strftime("%B %Y"),
+            prev_month=prev_month.strftime("%Y-%m"),
+            prev_month_label=prev_month.strftime("%b %Y"),
+            next_month=next_month.strftime("%Y-%m"),
+            next_month_label=next_month.strftime("%b %Y"),
+            active_section="faculty",
+            active_page="facultyattendance_monthly_summary",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/facultyattendance/monthly_summary.html", context)
 
     def mark_view(self, request):
         if not (self.has_add_permission(request) and self.has_change_permission(request)):
@@ -1409,10 +1471,15 @@ class FacultyAttendanceAdmin(admin.ModelAdmin):
                     # can come back and fill it in later.
                     continue
                 remarks = request.POST.get(f"remarks__{teacher.id}", "").strip()
+                classes_raw = request.POST.get(f"classes__{teacher.id}", "").strip()
+                try:
+                    classes_taken = max(int(classes_raw), 0) if classes_raw else 0
+                except ValueError:
+                    classes_taken = 0
                 FacultyAttendance.objects.update_or_create(
                     teacher=teacher,
                     attendance_date=target_date,
-                    defaults={"status": status, "remarks": remarks},
+                    defaults={"status": status, "remarks": remarks, "classes_taken": classes_taken},
                 )
                 saved_count += 1
 
@@ -2408,6 +2475,12 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
                 salary_month = request.GET.get("salary_month")
                 if salary_month:
                     initial["salary_month"] = salary_month
+                classes_param = request.GET.get("classes")
+                if classes_param:
+                    try:
+                        initial["classes_taken"] = max(int(classes_param), 0)
+                    except ValueError:
+                        pass
             form = TeacherSalaryForm(
                 instance=instance, initial=initial, lock_teacher=locked_teacher
             )
@@ -2586,14 +2659,23 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
-        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
-            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-        )
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
+        from importlib import import_module
+
+        colors = import_module("reportlab.lib.colors")
+        A4 = import_module("reportlab.lib.pagesizes").A4
+        mm = import_module("reportlab.lib.units").mm
+        platypus = import_module("reportlab.platypus")
+        SimpleDocTemplate = platypus.SimpleDocTemplate
+        Table = platypus.Table
+        TableStyle = platypus.TableStyle
+        Paragraph = platypus.Paragraph
+        Spacer = platypus.Spacer
+        styles_module = import_module("reportlab.lib.styles")
+        getSampleStyleSheet = styles_module.getSampleStyleSheet
+        ParagraphStyle = styles_module.ParagraphStyle
+        enums = import_module("reportlab.lib.enums")
+        TA_RIGHT = enums.TA_RIGHT
+        TA_CENTER = enums.TA_CENTER
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(

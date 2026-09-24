@@ -71,6 +71,16 @@
         <label for="absent_{{ row.teacher.id }}">Absent</label>
       </div>
       <input
+        type="number"
+        name="classes__{{ row.teacher.id }}"
+        value="{{ row.record.classes_taken|default:'0' }}"
+        min="0"
+        step="1"
+        title="Classes taken"
+        style="width:90px;"
+        class="border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+      >
+      <input
         type="text"
         name="remarks__{{ row.teacher.id }}"
         value="{{ row.record.remarks|default:'' }}"

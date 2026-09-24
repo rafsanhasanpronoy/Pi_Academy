@@ -46,10 +46,16 @@
     <h1 class="page-title">Faculty Attendance</h1>
     <p class="page-sub">Day-by-day attendance history for every faculty member</p>
   </div>
-  <a href="{% url 'admin:core_facultyattendance_mark' %}" class="btn btn-accent">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
-    Mark Attendance
-  </a>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_facultyattendance_monthly_summary' %}" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="m8.5 14 2 2 4-4"/></svg>
+      Monthly Summary
+    </a>
+    <a href="{% url 'admin:core_facultyattendance_mark' %}" class="btn btn-accent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
+      Mark Attendance
+    </a>
+  </div>
 </div>
 
 <div class="stat-grid">

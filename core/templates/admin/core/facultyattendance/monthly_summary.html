@@ -1,0 +1,58 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}Monthly Attendance Summary — Dashboard{% endblock %}
+{% block crumb %}Monthly Attendance Summary{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_facultyattendance_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  Back to Attendance History
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Monthly Attendance Summary</h1>
+    <p class="page-sub">{{ target_month_label }} — present, absent and late days, and total classes taken, per teacher</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_facultyattendance_monthly_summary' %}?month={{ prev_month }}" class="btn btn-ghost">&larr; {{ prev_month_label }}</a>
+    <a href="{% url 'admin:core_facultyattendance_monthly_summary' %}?month={{ next_month }}" class="btn btn-ghost">{{ next_month_label }} &rarr;</a>
+    <a href="{% url 'admin:core_facultyattendance_mark' %}" class="btn btn-accent">Mark Attendance</a>
+  </div>
+</div>
+
+<div class="panel">
+  {% if rows %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Teacher</th>
+        <th>Present Days</th>
+        <th>Late Days</th>
+        <th>Absent Days</th>
+        <th>Total Classes Taken</th>
+        <th style="width:160px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td style="font-weight:600;">{{ row.teacher.full_name }}</td>
+        <td>{{ row.present_days }}</td>
+        <td>{{ row.late_days }}</td>
+        <td>{{ row.absent_days }}</td>
+        <td style="font-weight:700;">{{ row.total_classes }}</td>
+        <td>
+          <a href="{% url 'admin:core_teachersalary_add' %}?teacher={{ row.teacher.id }}&salary_month={{ target_month|date:'Y-m' }}&classes={{ row.total_classes }}" class="btn btn-ghost btn-sm">Record Salary</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <p>No faculty members yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

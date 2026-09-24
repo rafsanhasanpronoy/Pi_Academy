@@ -124,6 +124,7 @@ class FacultyAttendance(models.Model):
         ('Absent', 'Absent'),
         ('Late', 'Late'),
     ])
+    classes_taken = models.PositiveIntegerField(default=0, blank=True)
     remarks = models.TextField(blank=True, null=True)
 
     class Meta:
