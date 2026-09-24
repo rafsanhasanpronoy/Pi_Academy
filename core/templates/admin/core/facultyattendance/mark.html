@@ -70,16 +70,19 @@
         <input type="radio" name="status__{{ row.teacher.id }}" value="Absent" id="absent_{{ row.teacher.id }}" {% if row.record.status == "Absent" %}checked{% endif %}>
         <label for="absent_{{ row.teacher.id }}">Absent</label>
       </div>
-      <input
-        type="number"
-        name="classes__{{ row.teacher.id }}"
-        value="{{ row.record.classes_taken|default:'0' }}"
-        min="0"
-        step="1"
-        title="Classes taken"
-        style="width:90px;"
-        class="border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
-      >
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <label for="classes_{{ row.teacher.id }}" style="font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Classes Taken</label>
+        <input
+          type="number"
+          id="classes_{{ row.teacher.id }}"
+          name="classes__{{ row.teacher.id }}"
+          value="{{ row.record.classes_taken|default:'0' }}"
+          min="0"
+          step="1"
+          style="width:90px;"
+          class="border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+        >
+      </div>
       <input
         type="text"
         name="remarks__{{ row.teacher.id }}"
