@@ -468,6 +468,15 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["bonus"].required = False
         self.fields["paid_amount"].required = False
 
+        # Whole numbers only, everywhere money or a class count is
+        # entered — no cents, no fractional classes. The DB columns stay
+        # DecimalField (a whole number fits fine in numeric(10,2)); this
+        # just stops decimals going in at the form level. Overriding
+        # `step` here matters because DecimalField's default widget step
+        # is "0.01", which is what makes browsers show a cents spinner.
+        for name in ("rate_per_class", "bonus", "paid_amount"):
+            self.fields[name].widget.attrs["step"] = "1"
+
         self.fields["classes_taken"].required = False
         self.fields["classes_taken"].label = "Classes Taken"
         self.fields["classes_taken"].widget.attrs.setdefault("min", 0)
@@ -489,15 +498,19 @@ class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
     # leave a field out), but the DB columns are NOT NULL with default=0
     # — an empty submission otherwise becomes None here and crashes
     # instance.save() with a raw IntegrityError instead of a clean
-    # validation message.
+    # validation message. Every one of these also gets rounded to a
+    # whole number — no cents, no fractional classes, ever.
     def clean_bonus(self):
-        return self.cleaned_data.get("bonus") or 0
+        return round(self.cleaned_data.get("bonus") or 0)
 
     def clean_paid_amount(self):
-        return self.cleaned_data.get("paid_amount") or 0
+        return round(self.cleaned_data.get("paid_amount") or 0)
 
     def clean_classes_taken(self):
-        return self.cleaned_data.get("classes_taken") or 0
+        return round(self.cleaned_data.get("classes_taken") or 0)
+
+    def clean_rate_per_class(self):
+        return round(self.cleaned_data.get("rate_per_class") or 0)
 
     def clean(self):
         cleaned_data = super().clean()

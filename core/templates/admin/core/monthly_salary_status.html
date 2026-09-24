@@ -112,7 +112,7 @@
           <span class="pill" style="background:var(--danger-soft); border-color:var(--danger-soft-border); color:var(--danger);">Not Recorded</span>
           {% endif %}
         </td>
-        <td style="font-weight:700;">{% if row.salary %}৳{{ row.salary.net_salary|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+        <td style="font-weight:700;">{% if row.salary %}৳{{ row.salary.net_salary|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
         <td>{{ row.salary.payment_date|date:"d M Y"|default:"—" }}</td>
         <td>
           <div class="row-actions">

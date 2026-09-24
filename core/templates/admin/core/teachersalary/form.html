@@ -150,9 +150,9 @@
     var net = classBasedPay + num(bonusEl);
     var due = Math.max(net - num(paidEl), 0);
 
-    classPayOut.textContent = '৳' + classBasedPay.toFixed(2);
-    netOut.textContent = '৳' + net.toFixed(2);
-    dueOut.textContent = '৳' + due.toFixed(2);
+    classPayOut.textContent = '৳' + Math.round(classBasedPay);
+    netOut.textContent = '৳' + Math.round(net);
+    dueOut.textContent = '৳' + Math.round(due);
   }
 
   [classesEl, rateEl, bonusEl, paidEl].forEach(function (el) {

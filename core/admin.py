@@ -2411,14 +2411,31 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
-        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
-            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-        )
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
+        try:
+            import importlib
+
+            colors = importlib.import_module("reportlab.lib.colors")
+            pagesizes = importlib.import_module("reportlab.lib.pagesizes")
+            units = importlib.import_module("reportlab.lib.units")
+            platypus = importlib.import_module("reportlab.platypus")
+            styles_module = importlib.import_module("reportlab.lib.styles")
+            enums = importlib.import_module("reportlab.lib.enums")
+        except ImportError as exc:
+            raise DjangoValidationError(
+                "PDF generation requires the ReportLab package."
+            ) from exc
+
+        A4 = pagesizes.A4
+        mm = units.mm
+        SimpleDocTemplate = platypus.SimpleDocTemplate
+        Table = platypus.Table
+        TableStyle = platypus.TableStyle
+        Paragraph = platypus.Paragraph
+        Spacer = platypus.Spacer
+        getSampleStyleSheet = styles_module.getSampleStyleSheet
+        ParagraphStyle = styles_module.ParagraphStyle
+        TA_RIGHT = enums.TA_RIGHT
+        TA_CENTER = enums.TA_CENTER
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -2471,12 +2488,12 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         breakdown_rows = [
             ["Item", "Amount (৳)"],
             ["Classes Taken", f"{salary.classes_taken}"],
-            ["Rate per Class", f"{salary.rate_per_class:,.2f}"],
-            ["Class-Based Pay", f"{salary.class_based_pay:,.2f}"],
-            ["Bonus", f"{salary.bonus:,.2f}"],
-            ["Net Salary", f"{salary.net_salary:,.2f}"],
-            ["Paid Amount", f"{salary.paid_amount:,.2f}"],
-            ["Due Amount", f"{salary.due_amount:,.2f}"],
+            ["Rate per Class", f"{salary.rate_per_class:,.0f}"],
+            ["Class-Based Pay", f"{salary.class_based_pay:,.0f}"],
+            ["Bonus", f"{salary.bonus:,.0f}"],
+            ["Net Salary", f"{salary.net_salary:,.0f}"],
+            ["Paid Amount", f"{salary.paid_amount:,.0f}"],
+            ["Due Amount", f"{salary.due_amount:,.0f}"],
         ]
         breakdown_table = Table(breakdown_rows, colWidths=[95 * mm, 60 * mm])
         breakdown_table.setStyle(TableStyle([

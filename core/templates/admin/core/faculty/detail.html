@@ -198,9 +198,9 @@
       {% for s in salaries %}
       <tr>
         <td style="font-weight:600;">{{ s.salary_month|date:"F Y" }}</td>
-        <td>৳{{ s.net_salary|floatformat:2 }}</td>
-        <td>৳{{ s.paid_amount|floatformat:2 }}</td>
-        <td>৳{{ s.due_amount|floatformat:2 }}</td>
+        <td>৳{{ s.net_salary|floatformat:0 }}</td>
+        <td>৳{{ s.paid_amount|floatformat:0 }}</td>
+        <td>৳{{ s.due_amount|floatformat:0 }}</td>
         <td><span class="pill">{{ s.get_status_display }}</span></td>
         <td>
           <div class="row-actions">

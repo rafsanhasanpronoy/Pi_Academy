@@ -148,9 +148,9 @@
         <td style="font-weight:600;">{{ salary.teacher.full_name }}</td>
         <td>{{ salary.salary_month|date:"F Y" }}</td>
         <td>{{ salary.classes_taken }} &times; ৳{{ salary.rate_per_class|floatformat:0 }}</td>
-        <td style="font-weight:700;">৳{{ salary.net_salary|floatformat:2 }}</td>
-        <td>৳{{ salary.paid_amount|floatformat:2 }}</td>
-        <td>৳{{ salary.due_amount|floatformat:2 }}</td>
+        <td style="font-weight:700;">৳{{ salary.net_salary|floatformat:0 }}</td>
+        <td>৳{{ salary.paid_amount|floatformat:0 }}</td>
+        <td>৳{{ salary.due_amount|floatformat:0 }}</td>
         <td>{{ salary.get_payment_method_display }}</td>
         <td>
           <span class="status-badge {% if salary.status == 'Paid' %}paid{% elif salary.status == 'Partial' %}partial{% else %}pending{% endif %}">

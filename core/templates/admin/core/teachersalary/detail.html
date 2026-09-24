@@ -61,12 +61,12 @@
 <div class="panel" style="padding: 28px 32px; margin-bottom: 20px;">
   <div class="form-grid">
     <div class="form-field"><span class="form-label">Classes Taken</span><div>{{ instance.classes_taken }}</div></div>
-    <div class="form-field"><span class="form-label">Rate per Class</span><div>৳{{ instance.rate_per_class|floatformat:2 }}</div></div>
-    <div class="form-field"><span class="form-label">Class-Based Pay</span><div>৳{{ instance.class_based_pay|floatformat:2 }}</div></div>
-    <div class="form-field"><span class="form-label">Bonus</span><div>৳{{ instance.bonus|floatformat:2 }}</div></div>
-    <div class="form-field"><span class="form-label">Net Salary</span><div class="code-badge">৳{{ instance.net_salary|floatformat:2 }}</div></div>
-    <div class="form-field"><span class="form-label">Paid Amount</span><div>৳{{ instance.paid_amount|floatformat:2 }}</div></div>
-    <div class="form-field"><span class="form-label">Due Amount</span><div>৳{{ instance.due_amount|floatformat:2 }}</div></div>
+    <div class="form-field"><span class="form-label">Rate per Class</span><div>৳{{ instance.rate_per_class|floatformat:0 }}</div></div>
+    <div class="form-field"><span class="form-label">Class-Based Pay</span><div>৳{{ instance.class_based_pay|floatformat:0 }}</div></div>
+    <div class="form-field"><span class="form-label">Bonus</span><div>৳{{ instance.bonus|floatformat:0 }}</div></div>
+    <div class="form-field"><span class="form-label">Net Salary</span><div class="code-badge">৳{{ instance.net_salary|floatformat:0 }}</div></div>
+    <div class="form-field"><span class="form-label">Paid Amount</span><div>৳{{ instance.paid_amount|floatformat:0 }}</div></div>
+    <div class="form-field"><span class="form-label">Due Amount</span><div>৳{{ instance.due_amount|floatformat:0 }}</div></div>
   </div>
 </div>
 
