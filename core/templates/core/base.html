@@ -289,7 +289,11 @@
 <header id="siteHeader" class="border-b border-hair sticky top-0 bg-paper/90 backdrop-blur z-40 transition-shadow duration-300" style="border-radius:0;">
   <div class="max-w-6xl mx-auto px-6 flex items-center justify-between h-20">
     <a href="{% url 'home' %}" class="flex items-center gap-3">
+      {% if ACADEMY_LOGO_URL %}
+      <img src="{{ ACADEMY_LOGO_URL }}" alt="Pi Academy" class="w-10 h-10 object-contain">
+      {% else %}
       <span class="w-10 h-10 rounded-full bg-gradient-to-br from-brand to-brand-dark text-white flex items-center justify-center font-display font-bold text-lg shadow-lg shadow-brand/30">&pi;</span>
+      {% endif %}
       <span class="font-display font-bold text-xl tracking-tight">Pi - π Academy</span>
     </a>
     <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
@@ -363,7 +367,11 @@
   <div class="max-w-6xl mx-auto px-6 py-14 grid grid-cols-1 md:grid-cols-3 gap-10">
     <div>
       <div class="flex items-center gap-3 mb-4">
+        {% if ACADEMY_LOGO_URL %}
+        <img src="{{ ACADEMY_LOGO_URL }}" alt="Pi Academy" class="w-9 h-9 object-contain">
+        {% else %}
         <span class="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-brand-dark text-white flex items-center justify-center font-display font-bold">&pi;</span>
+        {% endif %}
         <span class="font-display font-bold text-lg">Pi - π Academy</span>
       </div>
       <p class="text-sm text-muted leading-relaxed">

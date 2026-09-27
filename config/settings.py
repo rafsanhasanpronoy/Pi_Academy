@@ -95,6 +95,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.academy_branding',
             ],
         },
     },
@@ -210,6 +211,21 @@ LATE_DEDUCTION_PER_DAY = env.int("LATE_DEDUCTION_PER_DAY", default=150)
 # per class rather than (or alongside) a fixed monthly gross_salary.
 # Editable per record — this is just the starting value.
 DEFAULT_RATE_PER_CLASS = env.int("DEFAULT_RATE_PER_CLASS", default=300)
+
+# Public URL of the academy logo, hosted in Supabase storage rather than
+# as a static file — upload it once to the pi-academy-media bucket, put
+# its public URL here (or in the ACADEMY_LOGO_URL env var), and it's
+# picked up sitewide (header, footer, receipts, the salary slip PDF)
+# with no deploy needed to change it later, since file_overwrite=True
+# on that bucket means re-uploading to the same path just replaces it.
+ACADEMY_LOGO_URL = env("ACADEMY_LOGO_URL", default="")
+
+# Same idea as ACADEMY_LOGO_URL, for the 3 program banners on the
+# homepage slider (Math / Science / Kids Academy) — upload each PNG to
+# Supabase, put its public URL in the matching env var.
+PROGRAM_MATH_IMAGE_URL = env("PROGRAM_MATH_IMAGE_URL", default="")
+PROGRAM_SCIENCE_IMAGE_URL = env("PROGRAM_SCIENCE_IMAGE_URL", default="")
+PROGRAM_KIDS_IMAGE_URL = env("PROGRAM_KIDS_IMAGE_URL", default="")
 
 
 # Production security settings

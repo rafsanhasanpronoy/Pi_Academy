@@ -2659,23 +2659,16 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from importlib import import_module
-
-        colors = import_module("reportlab.lib.colors")
-        A4 = import_module("reportlab.lib.pagesizes").A4
-        mm = import_module("reportlab.lib.units").mm
-        platypus = import_module("reportlab.platypus")
-        SimpleDocTemplate = platypus.SimpleDocTemplate
-        Table = platypus.Table
-        TableStyle = platypus.TableStyle
-        Paragraph = platypus.Paragraph
-        Spacer = platypus.Spacer
-        styles_module = import_module("reportlab.lib.styles")
-        getSampleStyleSheet = styles_module.getSampleStyleSheet
-        ParagraphStyle = styles_module.ParagraphStyle
-        enums = import_module("reportlab.lib.enums")
-        TA_RIGHT = enums.TA_RIGHT
-        TA_CENTER = enums.TA_CENTER
+        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
+        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
+            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image,
+        )  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
+        import urllib.request
+        import urllib.error
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -2698,11 +2691,37 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         )
         right_style = ParagraphStyle("SlipRight", parent=styles["Normal"], alignment=TA_RIGHT)
 
-        elements = [
+        title_block = [
             Paragraph("Pi - π Academy", title_style),
             Paragraph("Salary Slip", sub_style),
-            Spacer(1, 14),
         ]
+
+        logo_img = None
+        if settings.ACADEMY_LOGO_URL:
+            try:
+                with urllib.request.urlopen(settings.ACADEMY_LOGO_URL, timeout=5) as resp:
+                    logo_bytes = BytesIO(resp.read())
+                logo_img = Image(logo_bytes, width=15 * mm, height=15 * mm)
+            except (urllib.error.URLError, OSError, ValueError):
+                # Slow/unreachable/broken URL — the slip should still
+                # generate, just without the logo, rather than 500ing.
+                logo_img = None
+
+        if logo_img is not None:
+            header_table = Table(
+                [[logo_img, title_block]],
+                colWidths=[20 * mm, 135 * mm],
+            )
+            header_table.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            elements = [header_table, Spacer(1, 14)]
+        else:
+            # ACADEMY_LOGO_URL isn't set yet, or the fetch failed — fall
+            # back to a text-only header rather than failing.
+            elements = title_block + [Spacer(1, 14)]
 
         meta_rows = [
             ["Receipt Number", salary.receipt_number or "—"],
