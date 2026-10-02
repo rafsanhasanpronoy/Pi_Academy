@@ -1045,7 +1045,6 @@ class AdmissionInquiryAdminForm(TailwindStyledFormMixin, forms.ModelForm):
 class ContactMessageAdminForm(TailwindStyledFormMixin, forms.ModelForm):
     """
     Used by admin.ContactMessageAdmin's custom add/change views.
-
     Separate from ContactMessageForm (the public contact page's form)
     for the same reason as AdmissionInquiryAdminForm — no honeypot, but
     it does have a status field for staff to update.
