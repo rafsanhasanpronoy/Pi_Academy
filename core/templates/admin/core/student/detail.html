@@ -141,29 +141,29 @@
 
 <p class="section-heading" style="font-size:1.1rem; font-weight:700; margin:28px 0 14px;">Payments</p>
 <div class="panel" style="margin-bottom:0;">
-  {% if payments %}
+  {% if receipts %}
   <table class="dash-table">
     <thead>
       <tr>
-        <th>Type</th>
-        <th>Amount</th>
+        <th>Receipt</th>
+        <th>Items</th>
+        <th>Total</th>
         <th>Payment Date</th>
-        <th>For Month</th>
         <th style="width:220px;">Actions</th>
       </tr>
     </thead>
     <tbody>
-      {% for payment in payments %}
+      {% for receipt in receipts %}
       <tr>
-        <td><span class="pill">{{ payment.payment_type }}</span></td>
-        <td style="font-weight:700;">৳{{ payment.amount|floatformat:2 }}</td>
-        <td>{{ payment.payment_date|date:"d M Y" }}</td>
-        <td>{% if payment.payment_month %}{{ payment.payment_month|date:"F Y" }}{% else %}&mdash;{% endif %}</td>
+        <td><span class="pill">{{ receipt.receipt_number|default:"—" }}</span></td>
+        <td>{% for item in receipt.items %}{{ item.payment_type }}{% if item.label and item.label != item.payment_type %} ({{ item.label }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td style="font-weight:700;">৳{{ receipt.net_total|floatformat:0 }}</td>
+        <td>{{ receipt.payment_date|date:"d M Y" }}</td>
         <td>
           <div class="row-actions">
-            <a href="{% url 'admin:core_studentpayment_view' payment.pk %}" class="btn btn-ghost btn-sm">View</a>
-            <a href="{% url 'admin:core_studentpayment_change' payment.pk %}" class="btn btn-ghost btn-sm">Edit</a>
-            <a href="{% url 'admin:core_studentpayment_receipt' payment.pk %}" target="_blank" class="btn btn-ghost btn-sm">Receipt</a>
+            <a href="{% url 'admin:core_studentpaymentreceipt_view' receipt.pk %}" class="btn btn-ghost btn-sm">View</a>
+            <a href="{% url 'admin:core_studentpaymentreceipt_change' receipt.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+            <a href="{% url 'admin:core_studentpaymentreceipt_receipt' receipt.pk %}" target="_blank" class="btn btn-ghost btn-sm">Receipt</a>
           </div>
         </td>
       </tr>
@@ -171,13 +171,13 @@
     </tbody>
   </table>
   <div style="padding:14px 22px; border-top:1px solid var(--border); font-size:0.85rem; color:var(--muted);">
-    Total paid: <span style="color:var(--text); font-weight:700;">৳{{ total_paid|floatformat:2 }}</span>
+    Total paid: <span style="color:var(--text); font-weight:700;">৳{{ total_paid|floatformat:0 }}</span>
   </div>
   {% else %}
   <div class="empty-state">
     <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10.5h19"/></svg>
     <p>No payments recorded for this student yet.</p>
-    <a href="{% url 'admin:core_studentpayment_add' %}?student={{ instance.id }}" class="btn btn-accent btn-sm" style="margin-top:10px;">Record a payment</a>
+    <a href="{% url 'admin:core_studentpaymentreceipt_add' %}?student={{ instance.id }}" class="btn btn-accent btn-sm" style="margin-top:10px;">Record a payment</a>
   </div>
   {% endif %}
 </div>

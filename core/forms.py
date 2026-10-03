@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from .models import (
     Achievement, AdmissionInfo, AdmissionInquiry, Batch, Class, ClassSchedule,
     ContactMessage, Exam, ExamResult, Faculty, Gallery, GallerySection, GallerySubsection,
-    Notice, Student, StudentPayment, Subject, TeacherSalary,
+    Notice, Student, StudentPayment, StudentPaymentReceipt, Subject, TeacherSalary,
 )
 
 INPUT_CLASSES = (
@@ -427,6 +427,40 @@ class StudentPaymentForm(TailwindStyledFormMixin, forms.ModelForm):
         if payment_type == "Monthly Fee" and not payment_month:
             raise ValidationError("Please select which month this payment covers.")
         return cleaned_data
+
+
+class StudentPaymentReceiptForm(TailwindStyledFormMixin, forms.ModelForm):
+    """Used by admin.StudentPaymentReceiptAdmin's custom add/change views.
+
+    Only the receipt header lives here — student, date, method, etc.
+    The line items (fee type, month, amount, discount — one row per
+    item, any number of rows) are built from raw POST data in
+    admin._paymentreceipt_form_view, the same way GallerySubsection's
+    per-image descriptions are, since a fixed ModelForm field can't
+    represent "however many rows the person adds."
+    """
+
+    class Meta:
+        model = StudentPaymentReceipt
+        fields = ["student", "payment_date", "payment_method", "transaction_id", "remarks"]
+        widgets = {
+            "payment_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "remarks": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, lock_student=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["payment_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["student"].empty_label = "Select a student"
+        self.fields["transaction_id"].required = False
+        self.fields["transaction_id"].help_text = "Bank/mobile-wallet transaction reference, if applicable."
+        self.fields["remarks"].required = False
+
+        if lock_student is not None:
+            self.fields["student"].initial = lock_student.pk
+            self.fields["student"].widget = forms.HiddenInput()
+
+        self._style_fields()
 
 
 class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):
@@ -1045,6 +1079,7 @@ class AdmissionInquiryAdminForm(TailwindStyledFormMixin, forms.ModelForm):
 class ContactMessageAdminForm(TailwindStyledFormMixin, forms.ModelForm):
     """
     Used by admin.ContactMessageAdmin's custom add/change views.
+
     Separate from ContactMessageForm (the public contact page's form)
     for the same reason as AdmissionInquiryAdminForm — no honeypot, but
     it does have a status field for staff to update.

@@ -1,0 +1,279 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}{% if instance %}Edit Receipt{% else %}Record a Payment{% endif %} — Dashboard{% endblock %}
+{% block crumb %}Payment Receipts{% endblock %}
+
+{% block extra_head %}
+<style>
+  .item-row {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .item-row:last-child { border-bottom: none; }
+  .item-row .field-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .item-row select, .item-row input {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: white;
+    padding: 9px 10px;
+    font-size: 0.9rem;
+  }
+  .item-row input:focus, .item-row select:focus {
+    outline: none;
+    border-color: var(--brand, #4e6933);
+  }
+  .item-remove {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    background: white;
+    border-radius: 8px;
+    color: #991B1B;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .item-remove:hover { background: #FEE2E2; }
+  .calc-summary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 22px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px 20px;
+  }
+  .calc-summary .item { display: flex; flex-direction: column; gap: 2px; }
+  .calc-summary .label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .calc-summary .value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+  @media (max-width: 700px) {
+    .item-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% if instance %}{% url 'admin:core_studentpaymentreceipt_view' instance.pk %}{% else %}{% url 'admin:core_studentpaymentreceipt_changelist' %}{% endif %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  {% if instance %}Back to Receipt{% else %}Back to Payment Receipts{% endif %}
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if instance %}Edit Receipt{% else %}Record a Payment{% endif %}</h1>
+    {% if locked_student %}
+    <p class="page-sub">For {{ locked_student.full_name }}{% if instance.receipt_number %} · {{ instance.receipt_number }}{% endif %}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel form-card form-card-wide">
+  {% if form.non_field_errors %}
+    {% for error in form.non_field_errors %}
+    <div class="form-error" style="margin-bottom: 16px;">{{ error }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="calc-summary" id="calcSummary">
+    <div class="item"><span class="label">Total Amount</span><span class="value" id="calcTotal">৳0</span></div>
+    <div class="item"><span class="label">Total Discount</span><span class="value" id="calcDiscount">৳0</span></div>
+    <div class="item"><span class="label">Net Payable</span><span class="value" id="calcNet">৳0</span></div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="form-grid">
+      {% if locked_student %}
+      {{ form.student }}
+      <div class="form-field full-width">
+        <span class="form-label">Student</span>
+        <div class="code-badge">{{ locked_student.full_name }} ({{ locked_student.student_code }})</div>
+      </div>
+      {% else %}
+      <div class="form-field full-width">
+        <label class="form-label" for="{{ form.student.id_for_label }}">Student</label>
+        {{ form.student }}
+        {% if form.student.errors %}<div class="form-error">{{ form.student.errors.0 }}</div>{% endif %}
+      </div>
+      {% endif %}
+
+      <div class="form-field">
+        <label class="form-label" for="{{ form.payment_date.id_for_label }}">Payment Date</label>
+        {{ form.payment_date }}
+        {% if form.payment_date.errors %}<div class="form-error">{{ form.payment_date.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.payment_method.id_for_label }}">Payment Method</label>
+        {{ form.payment_method }}
+        {% if form.payment_method.errors %}<div class="form-error">{{ form.payment_method.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.transaction_id.id_for_label }}">Transaction ID</label>
+        {{ form.transaction_id }}
+        <p class="form-help">{{ form.transaction_id.help_text }}</p>
+        {% if form.transaction_id.errors %}<div class="form-error">{{ form.transaction_id.errors.0 }}</div>{% endif %}
+      </div>
+    </div>
+
+    <p class="form-section-label">What's being paid</p>
+    <p class="form-help" style="margin-bottom:10px;">Add one row per fee — e.g. three rows for January/February/March Monthly Fee, or an Admission Fee row plus a Monthly Fee row, all on this one receipt.</p>
+
+    <div id="itemRows">
+      {% for item in existing_items %}
+      <div class="item-row">
+        <div>
+          <span class="field-label">Type</span>
+          <select name="item_type[]" class="item-type">
+            {% for value, label in item_type_choices %}
+            <option value="{{ value }}" {% if item.payment_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="item-month-wrap" {% if item.payment_type != "Monthly Fee" %}style="display:none;"{% endif %}>
+          <span class="field-label">Month</span>
+          <input type="month" name="item_month[]" value="{{ item.payment_month|default:''|slice:':7' }}">
+        </div>
+        <div>
+          <span class="field-label">Amount (৳)</span>
+          <input type="number" name="item_amount[]" class="item-amount" min="0" step="1" value="{{ item.amount|floatformat:0 }}">
+        </div>
+        <div>
+          <span class="field-label">Discount (৳)</span>
+          <input type="number" name="item_discount[]" class="item-discount" min="0" step="1" value="{{ item.discount|floatformat:0 }}">
+        </div>
+        <button type="button" class="item-remove" aria-label="Remove row">&times;</button>
+      </div>
+      {% endfor %}
+    </div>
+
+    <button type="button" id="addItemRow" class="btn btn-ghost btn-sm" style="margin-top:14px;">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      Add another item
+    </button>
+
+    <div class="form-field full-width" style="margin-top:22px;">
+      <label class="form-label" for="{{ form.remarks.id_for_label }}">Remarks</label>
+      {{ form.remarks }}
+      {% if form.remarks.errors %}<div class="form-error">{{ form.remarks.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">{% if instance %}Save Changes{% else %}Save Receipt{% endif %}</button>
+      <a href="{% if instance %}{% url 'admin:core_studentpaymentreceipt_view' instance.pk %}{% else %}{% url 'admin:core_studentpaymentreceipt_changelist' %}{% endif %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<template id="itemRowTemplate">
+  <div class="item-row">
+    <div>
+      <span class="field-label">Type</span>
+      <select name="item_type[]" class="item-type">
+        {% for value, label in item_type_choices %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="item-month-wrap" style="display:none;">
+      <span class="field-label">Month</span>
+      <input type="month" name="item_month[]">
+    </div>
+    <div>
+      <span class="field-label">Amount (৳)</span>
+      <input type="number" name="item_amount[]" class="item-amount" min="0" step="1" value="0">
+    </div>
+    <div>
+      <span class="field-label">Discount (৳)</span>
+      <input type="number" name="item_discount[]" class="item-discount" min="0" step="1" value="0">
+    </div>
+    <button type="button" class="item-remove" aria-label="Remove row">&times;</button>
+  </div>
+</template>
+
+<script>
+(function () {
+  var rowsWrap = document.getElementById('itemRows');
+  var addBtn = document.getElementById('addItemRow');
+  var rowTemplate = document.getElementById('itemRowTemplate');
+
+  var totalOut = document.getElementById('calcTotal');
+  var discountOut = document.getElementById('calcDiscount');
+  var netOut = document.getElementById('calcNet');
+
+  function num(el) {
+    var v = parseFloat(el && el.value);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function recalc() {
+    var total = 0, discount = 0;
+    rowsWrap.querySelectorAll('.item-row').forEach(function (row) {
+      total += num(row.querySelector('.item-amount'));
+      discount += num(row.querySelector('.item-discount'));
+    });
+    totalOut.textContent = '৳' + Math.round(total);
+    discountOut.textContent = '৳' + Math.round(discount);
+    netOut.textContent = '৳' + Math.round(total - discount);
+  }
+
+  function wireRow(row) {
+    var typeSelect = row.querySelector('.item-type');
+    var monthWrap = row.querySelector('.item-month-wrap');
+    var removeBtn = row.querySelector('.item-remove');
+
+    function toggleMonth() {
+      monthWrap.style.display = typeSelect.value === 'Monthly Fee' ? '' : 'none';
+      if (typeSelect.value !== 'Monthly Fee') {
+        monthWrap.querySelector('input').value = '';
+      }
+    }
+    typeSelect.addEventListener('change', toggleMonth);
+    toggleMonth();
+
+    removeBtn.addEventListener('click', function () {
+      if (rowsWrap.querySelectorAll('.item-row').length > 1) {
+        row.remove();
+        recalc();
+      } else {
+        row.querySelectorAll('.item-amount, .item-discount').forEach(function (el) { el.value = 0; });
+        recalc();
+      }
+    });
+
+    row.querySelectorAll('.item-amount, .item-discount').forEach(function (el) {
+      el.addEventListener('input', recalc);
+    });
+  }
+
+  rowsWrap.querySelectorAll('.item-row').forEach(wireRow);
+
+  addBtn.addEventListener('click', function () {
+    var clone = rowTemplate.content.cloneNode(true);
+    rowsWrap.appendChild(clone);
+    wireRow(rowsWrap.lastElementChild);
+    recalc();
+  });
+
+  if (!rowsWrap.querySelector('.item-row')) {
+    addBtn.click();
+  }
+
+  recalc();
+})();
+</script>
+{% endblock %}

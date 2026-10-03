@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Receipt — {{ receipt.student.full_name }} — {{ academy_name }}</title>
+<style>
+  :root { --brand: #4e6933; --ink: #1A1A1A; --muted: #6B7280; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, Georgia, serif;
+    color: var(--ink);
+    margin: 0;
+    padding: 48px;
+    background: #f4f4f4;
+  }
+  .receipt {
+    max-width: 640px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 44px 48px;
+  }
+  .receipt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid var(--brand);
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+  }
+  .brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-badge {
+    width: 40px; height: 40px;
+    background: var(--brand);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.3rem;
+    border-radius: 6px;
+  }
+  .brand-name { font-size: 1.15rem; font-weight: bold; }
+  .brand-logo { width: 40px; height: 40px; object-fit: contain; }
+  .receipt-label {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .receipt-id { font-size: 1.1rem; font-weight: bold; color: var(--ink); }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 32px;
+    margin-bottom: 30px;
+  }
+  .meta-item .meta-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 4px;
+  }
+  .meta-item .meta-value { font-size: 0.98rem; font-weight: 600; margin: 0; }
+
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.92rem;
+  }
+  .items-table th {
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    border-bottom: 2px solid rgba(0,0,0,0.1);
+    padding: 0 0 8px;
+  }
+  .items-table th.num, .items-table td.num { text-align: right; }
+  .items-table td {
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+
+  .totals-box {
+    background: rgba(78,105,51,0.06);
+    border: 1px solid rgba(78,105,51,0.25);
+    border-radius: 6px;
+    padding: 18px 24px;
+    margin-bottom: 30px;
+  }
+  .totals-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    padding: 3px 0;
+  }
+  .totals-row.net {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--brand);
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid rgba(78,105,51,0.25);
+  }
+
+  .remarks { font-size: 0.88rem; color: var(--muted); margin-bottom: 30px; }
+  .remarks .remarks-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 4px;
+  }
+
+  .receipt-footer {
+    border-top: 1px solid rgba(0,0,0,0.08);
+    padding-top: 16px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .print-bar {
+    max-width: 640px;
+    margin: 0 auto 16px;
+    text-align: right;
+  }
+  .print-btn {
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: bold;
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .print-btn:hover { opacity: 0.9; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .print-bar { display: none; }
+    .receipt { border: none; padding: 0; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-bar">
+  <button class="print-btn" onclick="window.print()">Print Receipt</button>
+</div>
+
+<div class="receipt">
+  <div class="receipt-header">
+    <div class="brand-mark">
+      {% if ACADEMY_LOGO_URL %}
+      <img src="{{ ACADEMY_LOGO_URL }}" alt="{{ academy_name }}" class="brand-logo">
+      {% else %}
+      <span class="brand-badge">&pi;</span>
+      {% endif %}
+      <span class="brand-name">{{ academy_name }}</span>
+    </div>
+    <div class="receipt-label">
+      Payment Receipt<br>
+      <span class="receipt-id">{{ receipt.receipt_number|default:receipt.id }}</span>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <p class="meta-label">Student</p>
+      <p class="meta-value">{{ receipt.student.full_name }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Student ID</p>
+      <p class="meta-value">{{ receipt.student.student_code }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Class</p>
+      <p class="meta-value">{{ receipt.student.class_obj.class_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Batch</p>
+      <p class="meta-value">{{ receipt.student.batch.batch_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Payment Date</p>
+      <p class="meta-value">{{ receipt.payment_date|date:"d M Y" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Payment Method</p>
+      <p class="meta-value">{{ receipt.get_payment_method_display }}{% if receipt.transaction_id %} &middot; {{ receipt.transaction_id }}{% endif %}</p>
+    </div>
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Fee</th>
+        <th>For</th>
+        <th class="num">Amount</th>
+        <th class="num">Discount</th>
+        <th class="num">Net</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in receipt.items %}
+      <tr>
+        <td>{{ item.payment_type }}</td>
+        <td>{{ item.label|default:"—" }}</td>
+        <td class="num">&#2547;{{ item.amount|floatformat:0 }}</td>
+        <td class="num">{% if item.discount %}&#2547;{{ item.discount|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+        <td class="num">&#2547;{{ item.net|floatformat:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-box">
+    <div class="totals-row">
+      <span>Subtotal</span>
+      <span>&#2547;{{ receipt.total_amount|floatformat:0 }}</span>
+    </div>
+    {% if receipt.total_discount %}
+    <div class="totals-row">
+      <span>Discount</span>
+      <span>&minus;&#2547;{{ receipt.total_discount|floatformat:0 }}</span>
+    </div>
+    {% endif %}
+    <div class="totals-row net">
+      <span>Total Paid</span>
+      <span>&#2547;{{ receipt.net_total|floatformat:0 }}</span>
+    </div>
+  </div>
+
+  {% if receipt.remarks %}
+  <div class="remarks">
+    <p class="remarks-label">Remarks</p>
+    <p>{{ receipt.remarks }}</p>
+  </div>
+  {% endif %}
+
+  <div class="receipt-footer">
+    <span>Generated {{ generated_at|date:"d M Y, g:i A" }}</span>
+    <span>{{ academy_name }} &middot; This is a system-generated receipt</span>
+  </div>
+</div>
+
+</body>
+</html>

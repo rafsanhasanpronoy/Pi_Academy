@@ -19,7 +19,7 @@ from .forms import (
     AchievementForm, AdmissionInfoForm, AdmissionInquiryAdminForm, BatchForm, ClassForm,
     ClassScheduleForm, ContactMessageAdminForm, ExamForm, ExamResultForm, FacultyForm,
     GalleryForm, GallerySectionForm, GallerySubsectionForm, NoticeForm, StudentForm,
-    StudentPaymentForm, SubjectForm, TeacherSalaryForm,
+    StudentPaymentForm, StudentPaymentReceiptForm, SubjectForm, TeacherSalaryForm,
 )
 import openpyxl
 import re
@@ -38,6 +38,7 @@ from .models import (
     Exam,
     ExamResult,
     StudentPayment,
+    StudentPaymentReceipt,
     TeacherSalary,
     Achievement,
     Gallery,
@@ -695,6 +696,20 @@ def _generate_receipt_number():
     return receipt_number
 
 
+def _generate_payment_receipt_number():
+    """Builds student payment receipt numbers like PAY-2026-00001 —
+    sequential within the current calendar year, never reused."""
+    year = timezone.localdate().year
+    prefix = f"PAY-{year}-"
+    seq = StudentPaymentReceipt.objects.filter(receipt_number__startswith=prefix).count() + 1
+    receipt_number = f"{prefix}{seq:05d}"
+
+    while StudentPaymentReceipt.objects.filter(receipt_number=receipt_number).exists():
+        seq += 1
+        receipt_number = f"{prefix}{seq:05d}"
+    return receipt_number
+
+
 # Column headers for the bulk student enrollment template — order matters,
 # since the upload view reads cells by position after checking these
 # headers match. Keep this in sync with the template generator and the
@@ -855,12 +870,12 @@ class StudentAdmin(admin.ModelAdmin):
         instance = get_object_or_404(
             Student.objects.select_related("class_obj", "batch"), pk=object_id
         )
-        payments = StudentPayment.objects.filter(student=instance).order_by("-payment_date")
-        total_paid = payments.aggregate(total=Sum("amount"))["total"] or 0
+        receipts = StudentPaymentReceipt.objects.filter(student=instance).order_by("-payment_date")
+        total_paid = sum((r.net_total for r in receipts), Decimal("0"))
         context = dict(
             self.admin_site.each_context(request),
             instance=instance,
-            payments=payments,
+            receipts=receipts,
             total_paid=total_paid,
             active_section="students",
             active_page="student_view",
@@ -2262,6 +2277,443 @@ class StudentPaymentAdmin(admin.ModelAdmin):
         return TemplateResponse(request, "admin/core/payment_receipt.html", context)
 
 
+@admin.register(StudentPaymentReceipt)
+class StudentPaymentReceiptAdmin(admin.ModelAdmin):
+    """
+    The new way to record student payments — one receipt, any number of
+    line items (several months at once, an admission fee plus the first
+    month's fee, etc.), each with its own optional discount/waiver.
+
+    The old StudentPayment/StudentPaymentAdmin above is untouched and
+    still reachable directly for historical records, but isn't linked
+    from the sidebar anymore — this replaces it going forward.
+    """
+
+    search_fields = ("student__full_name", "student__student_code", "receipt_number")
+
+    ITEM_TYPE_CHOICES = [
+        ("Admission Fee", "Admission Fee"),
+        ("Monthly Fee", "Monthly Fee"),
+        ("Exam Fee", "Exam Fee"),
+        ("Registration Fee", "Registration Fee"),
+        ("Other", "Other"),
+    ]
+
+    # ------------------------------------------------------------------
+    def _filtered_receipts(self, request):
+        receipts = StudentPaymentReceipt.objects.select_related("student").order_by(
+            "-payment_date", "-id"
+        )
+
+        query = request.GET.get("q", "").strip()
+        if query:
+            receipts = receipts.filter(
+                Q(student__full_name__icontains=query)
+                | Q(student__student_code__icontains=query)
+                | Q(receipt_number__icontains=query)
+            )
+
+        active_method = request.GET.get("method", "").strip()
+        if active_method:
+            receipts = receipts.filter(payment_method=active_method)
+
+        def _parse_iso_date(value):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                return None
+
+        date_from = request.GET.get("from", "").strip()
+        parsed_from = _parse_iso_date(date_from) if date_from else None
+        if parsed_from:
+            receipts = receipts.filter(payment_date__gte=parsed_from)
+
+        date_to = request.GET.get("to", "").strip()
+        parsed_to = _parse_iso_date(date_to) if date_to else None
+        if parsed_to:
+            receipts = receipts.filter(payment_date__lte=parsed_to)
+
+        return receipts, query, active_method, date_from, date_to
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        receipts, query, active_method, date_from, date_to = self._filtered_receipts(request)
+
+        totals = receipts.aggregate(
+            total_collected=Sum("total_amount"),
+            total_discount=Sum("total_discount"),
+        )
+        today = timezone.localdate()
+        this_month_total = StudentPaymentReceipt.objects.filter(
+            payment_date__year=today.year, payment_date__month=today.month
+        ).aggregate(total=Sum("total_amount"))["total"] or 0
+
+        paginator = Paginator(receipts, 15)
+        page_obj = paginator.get_page(request.GET.get("page"))
+
+        preserved_params = request.GET.copy()
+        preserved_params.pop("page", None)
+        preserved_querystring = preserved_params.urlencode()
+
+        context = dict(
+            self.admin_site.each_context(request),
+            receipts=page_obj,
+            page_obj=page_obj,
+            page_range=_pagination_range(page_obj.number, paginator.num_pages),
+            preserved_querystring=preserved_querystring,
+            cards={
+                "receipt_count": receipts.count(),
+                "total_collected": totals["total_collected"] or 0,
+                "total_discount": totals["total_discount"] or 0,
+                "this_month_total": this_month_total,
+            },
+            method_choices=StudentPaymentReceipt.PAYMENT_METHODS,
+            active_method=active_method,
+            search_query=query,
+            date_from=date_from,
+            date_to=date_to,
+            active_section="finance",
+            active_page="studentpaymentreceipt_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/studentpaymentreceipt/list.html", context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "monthly-status/",
+                self.admin_site.admin_view(self.monthly_status_view),
+                name="core_studentpaymentreceipt_monthly_status",
+            ),
+            path(
+                "<int:receipt_id>/receipt/",
+                self.admin_site.admin_view(self.receipt_view),
+                name="core_studentpaymentreceipt_receipt",
+            ),
+            path(
+                "<path:object_id>/view/",
+                self.admin_site.admin_view(self.view_view),
+                name="core_studentpaymentreceipt_view",
+            ),
+        ]
+        return custom_urls + urls
+
+    def add_view(self, request, form_url="", extra_context=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        return self._paymentreceipt_form_view(request, instance=None)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(StudentPaymentReceipt, pk=object_id)
+        return self._paymentreceipt_form_view(request, instance=instance)
+
+    def view_view(self, request, object_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(
+            StudentPaymentReceipt.objects.select_related("student"), pk=object_id
+        )
+        context = dict(
+            self.admin_site.each_context(request),
+            instance=instance,
+            active_section="finance",
+            active_page="studentpaymentreceipt_view",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/studentpaymentreceipt/detail.html", context)
+
+    def _parse_items_from_post(self, request):
+        """Rows are submitted as parallel arrays (item_type[], item_month[],
+        item_amount[], item_discount[]) since the person can add any number
+        of rows in the browser — there's no fixed set of form fields to
+        declare ahead of time, same reasoning as GallerySubsection's
+        per-image fields."""
+        types = request.POST.getlist("item_type[]")
+        months = request.POST.getlist("item_month[]")
+        amounts = request.POST.getlist("item_amount[]")
+        discounts = request.POST.getlist("item_discount[]")
+
+        items = []
+        errors = []
+        total_amount = Decimal("0")
+        total_discount = Decimal("0")
+
+        for row_num, (item_type, month_raw, amount_raw, discount_raw) in enumerate(
+            zip(types, months, amounts, discounts), start=1
+        ):
+            item_type = (item_type or "").strip()
+            if not item_type:
+                continue
+
+            try:
+                amount = Decimal(amount_raw or "0")
+            except InvalidOperation:
+                amount = Decimal("0")
+            amount = max(round(amount), Decimal("0"))
+
+            try:
+                discount = Decimal(discount_raw or "0")
+            except InvalidOperation:
+                discount = Decimal("0")
+            discount = max(round(discount), Decimal("0"))
+
+            if amount <= 0:
+                errors.append(f"Row {row_num}: enter an amount greater than ৳0.")
+                continue
+            if discount > amount:
+                errors.append(f"Row {row_num}: the discount can't be more than the amount.")
+                continue
+
+            month_iso = None
+            label = item_type
+            if item_type == "Monthly Fee":
+                if not month_raw:
+                    errors.append(f"Row {row_num}: pick which month this fee covers.")
+                    continue
+                try:
+                    month_date = datetime.strptime(month_raw, "%Y-%m").date()
+                except ValueError:
+                    errors.append(f"Row {row_num}: that month doesn't look right.")
+                    continue
+                month_iso = month_date.isoformat()
+                label = month_date.strftime("%B %Y")
+
+            net = amount - discount
+            items.append({
+                "payment_type": item_type,
+                "payment_month": month_iso,
+                "label": label,
+                "amount": float(amount),
+                "discount": float(discount),
+                "net": float(net),
+            })
+            total_amount += amount
+            total_discount += discount
+
+        if not items and not errors:
+            errors.append("Add at least one item to this receipt.")
+
+        return items, total_amount, total_discount, errors
+
+    def _check_duplicate_months(self, student, items, exclude_pk=None):
+        """A student paying Jan+Feb+Mar in one receipt is fine; paying for
+        the same month twice across two different receipts is almost
+        always a mistake — catch it with a clear message instead of
+        silently double-charging (or double-crediting) that month."""
+        new_months = {
+            item["payment_month"] for item in items
+            if item.get("payment_type") == "Monthly Fee" and item.get("payment_month")
+        }
+        if not new_months:
+            return None
+
+        other_receipts = StudentPaymentReceipt.objects.filter(student=student)
+        if exclude_pk:
+            other_receipts = other_receipts.exclude(pk=exclude_pk)
+
+        for receipt in other_receipts:
+            for item in (receipt.items or []):
+                if item.get("payment_type") == "Monthly Fee" and item.get("payment_month") in new_months:
+                    month_label = item.get("label", item["payment_month"])
+                    return (
+                        f"{student.full_name} already has a Monthly Fee payment for "
+                        f"{month_label} on receipt {receipt.receipt_number or receipt.pk}."
+                    )
+        return None
+
+    def _paymentreceipt_form_view(self, request, instance):
+        if instance is not None:
+            locked_student = instance.student
+        else:
+            student_id = request.GET.get("student") or request.POST.get("student")
+            locked_student = (
+                Student.objects.filter(pk=student_id).first() if student_id else None
+            )
+
+        form_errors = []
+
+        if request.method == "POST":
+            form = StudentPaymentReceiptForm(
+                request.POST, instance=instance, lock_student=locked_student
+            )
+            items, total_amount, total_discount, item_errors = self._parse_items_from_post(request)
+            form_errors.extend(item_errors)
+
+            if form.is_valid() and not form_errors:
+                receipt = form.save(commit=False)
+                if locked_student is not None:
+                    receipt.student = locked_student
+
+                dup_error = self._check_duplicate_months(
+                    receipt.student, items, exclude_pk=instance.pk if instance else None
+                )
+                if dup_error:
+                    form_errors.append(dup_error)
+                else:
+                    if not instance:
+                        receipt.receipt_number = _generate_payment_receipt_number()
+                    receipt.items = items
+                    receipt.total_amount = total_amount
+                    receipt.total_discount = total_discount
+                    receipt.save()
+                    self.message_user(
+                        request,
+                        f"Receipt {'updated' if instance else 'recorded'} successfully.",
+                        level=messages.SUCCESS,
+                    )
+                    return redirect("admin:core_studentpaymentreceipt_changelist")
+
+            # Re-render with whatever was typed, including the in-progress
+            # item rows, so a validation error doesn't wipe the form.
+            existing_items = items
+        else:
+            initial = {}
+            if instance is None:
+                payment_date = request.GET.get("payment_date")
+                if payment_date:
+                    initial["payment_date"] = payment_date
+            form = StudentPaymentReceiptForm(
+                instance=instance, initial=initial, lock_student=locked_student
+            )
+            existing_items = instance.items if instance else []
+
+        for error in form_errors:
+            messages.error(request, error)
+
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            instance=instance,
+            locked_student=locked_student,
+            existing_items=existing_items,
+            item_type_choices=self.ITEM_TYPE_CHOICES,
+            active_section="finance",
+            active_page="studentpaymentreceipt_edit" if instance else "studentpaymentreceipt_add",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/studentpaymentreceipt/form.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(StudentPaymentReceipt, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Receipt deleted.", level=messages.SUCCESS)
+        return redirect("admin:core_studentpaymentreceipt_changelist")
+
+    def receipt_view(self, request, receipt_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        receipt = get_object_or_404(
+            StudentPaymentReceipt.objects.select_related(
+                "student", "student__class_obj", "student__batch"
+            ),
+            pk=receipt_id,
+        )
+        context = {
+            "receipt": receipt,
+            "academy_name": "Pi - π Academy",
+            "generated_at": timezone.localtime(),
+        }
+        return TemplateResponse(request, "admin/core/student_payment_receipt.html", context)
+
+    def monthly_status_view(self, request):
+        """Same idea as the old StudentPayment version, rewritten to scan
+        each receipt's items list for a Monthly Fee line covering the
+        target month, since that's no longer a top-level DB column."""
+        month_param = request.GET.get("month")
+        if month_param:
+            try:
+                target_month = datetime.strptime(month_param, "%Y-%m").date().replace(day=1)
+            except ValueError:
+                target_month = timezone.localdate().replace(day=1)
+        else:
+            target_month = timezone.localdate().replace(day=1)
+
+        prev_month = (target_month - timedelta(days=1)).replace(day=1)
+        next_month_probe = target_month.replace(day=28) + timedelta(days=4)
+        next_month = next_month_probe.replace(day=1)
+
+        students = (
+            Student.objects.filter(status="Active")
+            .select_related("class_obj", "batch")
+            .order_by("full_name")
+        )
+
+        paid_info = {}
+        receipts = StudentPaymentReceipt.objects.filter(
+            student__in=students
+        ).only("id", "student_id", "items", "receipt_number")
+        for receipt in receipts:
+            for item in (receipt.items or []):
+                if item.get("payment_type") != "Monthly Fee" or not item.get("payment_month"):
+                    continue
+                try:
+                    item_month = datetime.strptime(item["payment_month"], "%Y-%m-%d").date()
+                except (ValueError, TypeError):
+                    continue
+                if item_month.year == target_month.year and item_month.month == target_month.month:
+                    paid_info[receipt.student_id] = {
+                        "net": item.get("net", 0),
+                        "receipt_pk": receipt.pk,
+                    }
+
+        rows = []
+        paid_count = 0
+        due_count = 0
+        for student in students:
+            info = paid_info.get(student.id)
+            is_paid = info is not None
+            if is_paid:
+                paid_count += 1
+            else:
+                due_count += 1
+
+            add_url = (
+                reverse("admin:core_studentpaymentreceipt_add")
+                + "?"
+                + urlencode({
+                    "student": student.id,
+                    "payment_date": timezone.localdate().isoformat(),
+                })
+            )
+
+            rows.append({
+                "student": student,
+                "is_paid": is_paid,
+                "amount_paid": info["net"] if info else None,
+                "receipt_url": (
+                    reverse("admin:core_studentpaymentreceipt_receipt", args=[info["receipt_pk"]])
+                    if info else None
+                ),
+                "record_payment_url": add_url,
+            })
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="Monthly Fee Status",
+            rows=rows,
+            target_month=target_month,
+            target_month_label=target_month.strftime("%B %Y"),
+            prev_month=prev_month.strftime("%Y-%m"),
+            prev_month_label=prev_month.strftime("%b %Y"),
+            next_month=next_month.strftime("%Y-%m"),
+            next_month_label=next_month.strftime("%b %Y"),
+            paid_count=paid_count,
+            due_count=due_count,
+            total_students=len(rows),
+            active_section="finance",
+            active_page="studentpaymentreceipt_monthly_status",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/monthly_fee_status.html", context)
+
+
 @admin.register(TeacherSalary)
 class TeacherSalaryAdmin(admin.ModelAdmin):
     list_display = (
@@ -2659,16 +3111,36 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             TeacherSalary.objects.select_related("teacher"), pk=salary_id
         )
 
-        from reportlab.lib import colors  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.pagesizes import A4  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.units import mm  # type: ignore[reportMissingModuleSource]
-        from reportlab.platypus import (  # type: ignore[reportMissingModuleSource]
-            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image,
-        )  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[reportMissingModuleSource]
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT  # type: ignore[reportMissingModuleSource]
+        import importlib
         import urllib.request
         import urllib.error
+
+        try:
+            colors = importlib.import_module("reportlab.lib.colors")
+            pagesizes = importlib.import_module("reportlab.lib.pagesizes")
+            units = importlib.import_module("reportlab.lib.units")
+            platypus = importlib.import_module("reportlab.platypus")
+            styles_module = importlib.import_module("reportlab.lib.styles")
+            enums_module = importlib.import_module("reportlab.lib.enums")
+        except ModuleNotFoundError:
+            return HttpResponse(
+                "Salary slip generation is unavailable because the optional 'reportlab' package is not installed.",
+                status=503,
+                content_type="text/plain",
+            )
+
+        A4 = pagesizes.A4
+        mm = units.mm
+        SimpleDocTemplate = platypus.SimpleDocTemplate
+        Table = platypus.Table
+        TableStyle = platypus.TableStyle
+        Paragraph = platypus.Paragraph
+        Spacer = platypus.Spacer
+        Image = platypus.Image
+        getSampleStyleSheet = styles_module.getSampleStyleSheet
+        ParagraphStyle = styles_module.ParagraphStyle
+        TA_CENTER = enums_module.TA_CENTER
+        TA_RIGHT = enums_module.TA_RIGHT
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(

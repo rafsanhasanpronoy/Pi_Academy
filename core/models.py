@@ -380,6 +380,53 @@ class StudentPayment(models.Model):
         return f"{self.student} — {self.payment_type} ({self.amount})"
 
 
+class StudentPaymentReceipt(models.Model):
+    """
+    Replaces the old one-payment-per-fee-per-receipt flow above (kept
+    untouched for history) with one receipt covering several fees at
+    once — e.g. January + February + March Monthly Fee, or an Admission
+    Fee plus the first month's fee, all printed on a single receipt.
+
+    `items` is a JSON list of line items, each shaped like:
+        {"payment_type": "Monthly Fee", "payment_month": "2026-01-01",
+         "label": "January 2026", "amount": 1500, "discount": 0, "net": 1500}
+    Same pattern as GallerySubsection.images — a flexible list on the
+    parent record rather than a separate child table.
+    """
+
+    PAYMENT_METHODS = [
+        ("Cash", "Cash"),
+        ("Bank", "Bank Transfer"),
+        ("Bkash", "bKash"),
+        ("Nagad", "Nagad"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    student = models.ForeignKey('Student', models.DO_NOTHING)
+    receipt_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    payment_date = models.DateField()
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="Cash")
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    items = models.JSONField(default=list)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'student_payment_receipts'
+        verbose_name = 'Student Payment Receipt'
+        verbose_name_plural = 'Student Payment Receipts'
+
+    def __str__(self):
+        return f"{self.student} — {self.receipt_number or self.pk}"
+
+    @property
+    def net_total(self):
+        return (self.total_amount or 0) - (self.total_discount or 0)
+
+
 class Student(models.Model):
     id = models.BigAutoField(primary_key=True)
     student_code = models.CharField(unique=True, max_length=30)
