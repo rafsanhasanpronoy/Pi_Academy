@@ -2295,7 +2295,6 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
         ("Admission Fee", "Admission Fee"),
         ("Monthly Fee", "Monthly Fee"),
         ("Exam Fee", "Exam Fee"),
-        ("Registration Fee", "Registration Fee"),
         ("Other", "Other"),
     ]
 
@@ -3120,14 +3119,12 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             pagesizes = importlib.import_module("reportlab.lib.pagesizes")
             units = importlib.import_module("reportlab.lib.units")
             platypus = importlib.import_module("reportlab.platypus")
-            styles_module = importlib.import_module("reportlab.lib.styles")
-            enums_module = importlib.import_module("reportlab.lib.enums")
-        except ModuleNotFoundError:
-            return HttpResponse(
-                "Salary slip generation is unavailable because the optional 'reportlab' package is not installed.",
-                status=503,
-                content_type="text/plain",
-            )
+            styles_mod = importlib.import_module("reportlab.lib.styles")
+            enums = importlib.import_module("reportlab.lib.enums")
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "reportlab is required to generate salary slips. Install it with 'pip install reportlab'."
+            ) from exc
 
         A4 = pagesizes.A4
         mm = units.mm
@@ -3137,10 +3134,10 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
         Paragraph = platypus.Paragraph
         Spacer = platypus.Spacer
         Image = platypus.Image
-        getSampleStyleSheet = styles_module.getSampleStyleSheet
-        ParagraphStyle = styles_module.ParagraphStyle
-        TA_CENTER = enums_module.TA_CENTER
-        TA_RIGHT = enums_module.TA_RIGHT
+        getSampleStyleSheet = styles_mod.getSampleStyleSheet
+        ParagraphStyle = styles_mod.ParagraphStyle
+        TA_CENTER = enums.TA_CENTER
+        TA_RIGHT = enums.TA_RIGHT
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
