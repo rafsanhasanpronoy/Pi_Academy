@@ -130,8 +130,53 @@
       </div>
     </div>
 
-    <p class="form-section-label">What's being paid</p>
-    <p class="form-help" style="margin-bottom:10px;">Add one row per fee — e.g. three rows for January/February/March Monthly Fee, or an Admission Fee row plus a Monthly Fee row, all on this one receipt.</p>
+    <p class="form-section-label">Monthly Fee</p>
+    <div class="panel" style="padding:18px 20px; margin-bottom:20px; background:var(--surface); box-shadow:none;">
+      <div class="radio-group" style="margin-bottom:14px;">
+        <input type="radio" name="monthlyMode" value="single" id="modeSingle" checked>
+        <label for="modeSingle">Single month</label>
+        <input type="radio" name="monthlyMode" value="multiple" id="modeMultiple">
+        <label for="modeMultiple">Multiple months</label>
+      </div>
+
+      <div id="singleMonthPanel">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end;">
+          <div>
+            <span class="field-label">Month</span>
+            <input type="month" id="singleMonthInput">
+          </div>
+          <div>
+            <span class="field-label">Amount (৳)</span>
+            <input type="number" id="singleMonthAmount" min="0" step="1" placeholder="e.g. 1500">
+          </div>
+          <div>
+            <span class="field-label">Discount (৳)</span>
+            <input type="number" id="singleMonthDiscount" min="0" step="1" value="0">
+          </div>
+          <button type="button" id="addSingleMonth" class="btn btn-accent btn-sm">Add</button>
+        </div>
+      </div>
+
+      <div id="multiMonthPanel" style="display:none;">
+        <span class="field-label">Select the months being paid for</span>
+        <div id="multiMonthChecks" style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 16px;"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
+          <div>
+            <span class="field-label">Amount per month (৳)</span>
+            <input type="number" id="multiMonthAmount" min="0" step="1" placeholder="e.g. 1500">
+          </div>
+          <div>
+            <span class="field-label">Discount per month (৳)</span>
+            <input type="number" id="multiMonthDiscount" min="0" step="1" value="0">
+          </div>
+          <button type="button" id="addMultiMonths" class="btn btn-accent btn-sm">Add selected months</button>
+        </div>
+      </div>
+      <p class="form-help" style="margin-top:10px;">Each month you add here becomes its own row below — the same amount and discount applies to every month you select at once. You can still fine-tune or remove any row individually afterward.</p>
+    </div>
+
+    <p class="form-section-label">Other fees</p>
+    <p class="form-help" style="margin-bottom:10px;">Admission Fee, Exam Fee, Registration Fee, or anything else. Every row below — whether added here or by the Monthly Fee tool above — is part of this one receipt.</p>
 
     <div id="itemRows">
       {% for item in existing_items %}
@@ -262,16 +307,116 @@
 
   rowsWrap.querySelectorAll('.item-row').forEach(wireRow);
 
-  addBtn.addEventListener('click', function () {
+  function addRow(type, month, amount, discount) {
     var clone = rowTemplate.content.cloneNode(true);
     rowsWrap.appendChild(clone);
-    wireRow(rowsWrap.lastElementChild);
+    var row = rowsWrap.lastElementChild;
+    wireRow(row);
+
+    if (type) {
+      row.querySelector('.item-type').value = type;
+      row.querySelector('.item-type').dispatchEvent(new Event('change'));
+    }
+    if (month) {
+      row.querySelector('.item-month-wrap input').value = month;
+    }
+    row.querySelector('.item-amount').value = amount || 0;
+    row.querySelector('.item-discount').value = discount || 0;
+    return row;
+  }
+
+  addBtn.addEventListener('click', function () {
+    addRow(null, null, 0, 0);
     recalc();
   });
 
   if (!rowsWrap.querySelector('.item-row')) {
     addBtn.click();
   }
+
+  // --- Monthly Fee quick-add panel ---------------------------------
+  var modeSingle = document.getElementById('modeSingle');
+  var modeMultiple = document.getElementById('modeMultiple');
+  var singlePanel = document.getElementById('singleMonthPanel');
+  var multiPanel = document.getElementById('multiMonthPanel');
+
+  function syncMode() {
+    var multi = modeMultiple.checked;
+    singlePanel.style.display = multi ? 'none' : '';
+    multiPanel.style.display = multi ? '' : 'none';
+  }
+  modeSingle.addEventListener('change', syncMode);
+  modeMultiple.addEventListener('change', syncMode);
+  syncMode();
+
+  // Single month
+  document.getElementById('addSingleMonth').addEventListener('click', function () {
+    var monthEl = document.getElementById('singleMonthInput');
+    var amountEl = document.getElementById('singleMonthAmount');
+    var discountEl = document.getElementById('singleMonthDiscount');
+
+    if (!monthEl.value) {
+      monthEl.focus();
+      return;
+    }
+    if (!amountEl.value || num(amountEl) <= 0) {
+      amountEl.focus();
+      return;
+    }
+
+    addRow('Monthly Fee', monthEl.value, amountEl.value, discountEl.value);
+    recalc();
+
+    monthEl.value = '';
+    amountEl.value = '';
+    discountEl.value = 0;
+  });
+
+  // Multiple months — a checkbox per month, 3 months back to 8 months
+  // ahead of today, so past catch-up payments and ahead-of-time ones
+  // both fit without needing a huge list.
+  var multiChecks = document.getElementById('multiMonthChecks');
+  var today = new Date();
+  var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  for (var offset = -3; offset <= 8; offset++) {
+    var d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+    var value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    var label = monthNames[d.getMonth()] + ' ' + d.getFullYear();
+
+    var wrap = document.createElement('label');
+    wrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:6px 14px; font-size:0.85rem; cursor:pointer; background:white;';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = value;
+    cb.className = 'multi-month-check';
+    wrap.appendChild(cb);
+    wrap.appendChild(document.createTextNode(label));
+    multiChecks.appendChild(wrap);
+  }
+
+  document.getElementById('addMultiMonths').addEventListener('click', function () {
+    var amountEl = document.getElementById('multiMonthAmount');
+    var discountEl = document.getElementById('multiMonthDiscount');
+    var checked = Array.prototype.slice.call(
+      multiChecks.querySelectorAll('.multi-month-check:checked')
+    );
+
+    if (!checked.length) return;
+    if (!amountEl.value || num(amountEl) <= 0) {
+      amountEl.focus();
+      return;
+    }
+
+    checked.forEach(function (cb) {
+      addRow('Monthly Fee', cb.value, amountEl.value, discountEl.value);
+      cb.checked = false;
+    });
+    recalc();
+
+    amountEl.value = '';
+    discountEl.value = 0;
+  });
 
   recalc();
 })();
