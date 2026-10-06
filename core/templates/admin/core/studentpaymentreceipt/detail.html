@@ -84,9 +84,9 @@
     </tbody>
   </table>
   <div style="padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:28px; font-size:0.9rem;">
-    <span>Total Amount: <strong>৳{{ instance.total_amount|floatformat:0 }}</strong></span>
+    <span>Payable Before Discount: <strong>৳{{ instance.total_amount|floatformat:0 }}</strong></span>
     <span>Discount: <strong>৳{{ instance.total_discount|floatformat:0 }}</strong></span>
-    <span>Net Paid: <strong>৳{{ instance.net_total|floatformat:0 }}</strong></span>
+    <span>Payable After Discount: <strong>৳{{ instance.net_total|floatformat:0 }}</strong></span>
   </div>
 </div>
 

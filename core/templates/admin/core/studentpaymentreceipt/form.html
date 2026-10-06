@@ -89,9 +89,9 @@
   {% endif %}
 
   <div class="calc-summary" id="calcSummary">
-    <div class="item"><span class="label">Total Amount</span><span class="value" id="calcTotal">৳0</span></div>
+    <div class="item"><span class="label">Payable Before Discount</span><span class="value" id="calcTotal">৳0</span></div>
     <div class="item"><span class="label">Discount</span><span class="value" id="calcDiscount">৳0</span></div>
-    <div class="item"><span class="label">Net Payable</span><span class="value" id="calcNet">৳0</span></div>
+    <div class="item"><span class="label">Payable After Discount</span><span class="value" id="calcNet">৳0</span></div>
   </div>
 
   <form method="post">
@@ -408,6 +408,18 @@
   });
 
   recalc();
+
+  // Number inputs increment/decrement on scroll when focused — mildly
+  // useful on a spinner by itself, actively dangerous here since
+  // scrolling the page while the cursor happens to be over an amount
+  // field silently changes what's about to be charged. Blur the field
+  // on scroll instead, so the page just scrolls normally.
+  document.addEventListener('wheel', function (e) {
+    var active = document.activeElement;
+    if (active && active.tagName === 'INPUT' && active.type === 'number') {
+      active.blur();
+    }
+  }, { passive: true });
 })();
 </script>
 {% endblock %}
