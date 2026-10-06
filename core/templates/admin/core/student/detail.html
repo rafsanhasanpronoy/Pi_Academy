@@ -62,7 +62,11 @@
     </div>
   </div>
   <div class="row-actions">
-    <a href="{% url 'admin:core_studentpayment_add' %}?student={{ instance.id }}" class="btn btn-ghost">
+    <a href="{% url 'admin:core_student_admission_form' instance.id %}" target="_blank" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      Print Admission Form
+    </a>
+    <a href="{% url 'admin:core_studentpaymentreceipt_add' %}?student={{ instance.id }}" class="btn btn-ghost">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       Record a payment
     </a>
@@ -83,6 +87,10 @@
     <div class="detail-row">
       <p class="detail-label">Batch</p>
       <p class="detail-value">{{ instance.batch.batch_name|default:"—" }}</p>
+    </div>
+    <div class="detail-row">
+      <p class="detail-label">Group / Year</p>
+      <p class="detail-value">{{ instance.group|default:"—" }}</p>
     </div>
     <div class="detail-row">
       <p class="detail-label">Status</p>

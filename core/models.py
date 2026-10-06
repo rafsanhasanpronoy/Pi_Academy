@@ -432,6 +432,11 @@ class Student(models.Model):
     student_code = models.CharField(unique=True, max_length=30)
     class_obj = models.ForeignKey(Class, models.DO_NOTHING, db_column='class_id')
     batch = models.ForeignKey(Batch, models.DO_NOTHING, blank=True, null=True)
+    # Free text rather than a fixed choice list — SSC/HSC students use a
+    # group (Science, Business Studies, Humanities), Honours students use
+    # a year (1st/2nd/3rd/4th Year), and whichever applies just gets
+    # typed in here rather than forcing one hardcoded list to cover both.
+    group = models.CharField(max_length=100, blank=True, null=True)
     full_name = models.CharField(max_length=150)
     photo_url = models.TextField(blank=True, null=True)
     gender = models.CharField(max_length=20, blank=True, null=True)

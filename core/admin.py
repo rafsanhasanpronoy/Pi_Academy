@@ -846,12 +846,34 @@ class StudentAdmin(admin.ModelAdmin):
                 name="core_student_preview_code",
             ),
             path(
+                "<int:student_id>/admission-form/",
+                self.admin_site.admin_view(self.admission_form_view),
+                name="core_student_admission_form",
+            ),
+            path(
                 "<path:object_id>/view/",
                 self.admin_site.admin_view(self.view_view),
                 name="core_student_view",
             ),
         ]
         return custom_urls + urls
+
+    def admission_form_view(self, request, student_id):
+        """Printable admission form — photo, class/batch/group, guardian
+        details, admission date. Same printable-HTML pattern as the
+        payment and salary receipts, not a PDF, so it opens instantly and
+        still prints cleanly via the browser's own Print dialog."""
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        student = get_object_or_404(
+            Student.objects.select_related("class_obj", "batch"), pk=student_id
+        )
+        context = {
+            "student": student,
+            "academy_name": "Pi - π Academy",
+            "generated_at": timezone.localtime(),
+        }
+        return TemplateResponse(request, "admin/core/student_admission_form.html", context)
 
     def add_view(self, request, form_url="", extra_context=None):
         if not self.has_add_permission(request):
@@ -2427,22 +2449,23 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
 
     def _parse_items_from_post(self, request):
         """Rows are submitted as parallel arrays (item_type[], item_month[],
-        item_amount[], item_discount[]) since the person can add any number
-        of rows in the browser — there's no fixed set of form fields to
-        declare ahead of time, same reasoning as GallerySubsection's
-        per-image fields."""
+        item_amount[]) since the person can add any number of rows in the
+        browser — there's no fixed set of form fields to declare ahead of
+        time, same reasoning as GallerySubsection's per-image fields.
+
+        There's no per-item discount — just one discount on the whole
+        receipt, entered on the form itself (StudentPaymentReceiptForm's
+        total_discount field) and applied in _paymentreceipt_form_view."""
         types = request.POST.getlist("item_type[]")
         months = request.POST.getlist("item_month[]")
         amounts = request.POST.getlist("item_amount[]")
-        discounts = request.POST.getlist("item_discount[]")
 
         items = []
         errors = []
         total_amount = Decimal("0")
-        total_discount = Decimal("0")
 
-        for row_num, (item_type, month_raw, amount_raw, discount_raw) in enumerate(
-            zip(types, months, amounts, discounts), start=1
+        for row_num, (item_type, month_raw, amount_raw) in enumerate(
+            zip(types, months, amounts), start=1
         ):
             item_type = (item_type or "").strip()
             if not item_type:
@@ -2454,17 +2477,8 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
                 amount = Decimal("0")
             amount = max(round(amount), Decimal("0"))
 
-            try:
-                discount = Decimal(discount_raw or "0")
-            except InvalidOperation:
-                discount = Decimal("0")
-            discount = max(round(discount), Decimal("0"))
-
             if amount <= 0:
                 errors.append(f"Row {row_num}: enter an amount greater than ৳0.")
-                continue
-            if discount > amount:
-                errors.append(f"Row {row_num}: the discount can't be more than the amount.")
                 continue
 
             month_iso = None
@@ -2481,22 +2495,18 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
                 month_iso = month_date.isoformat()
                 label = month_date.strftime("%B %Y")
 
-            net = amount - discount
             items.append({
                 "payment_type": item_type,
                 "payment_month": month_iso,
                 "label": label,
                 "amount": float(amount),
-                "discount": float(discount),
-                "net": float(net),
             })
             total_amount += amount
-            total_discount += discount
 
         if not items and not errors:
             errors.append("Add at least one item to this receipt.")
 
-        return items, total_amount, total_discount, errors
+        return items, total_amount, errors
 
     def _check_duplicate_months(self, student, items, exclude_pk=None):
         """A student paying Jan+Feb+Mar in one receipt is fine; paying for
@@ -2539,7 +2549,7 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
             form = StudentPaymentReceiptForm(
                 request.POST, instance=instance, lock_student=locked_student
             )
-            items, total_amount, total_discount, item_errors = self._parse_items_from_post(request)
+            items, total_amount, item_errors = self._parse_items_from_post(request)
             form_errors.extend(item_errors)
 
             if form.is_valid() and not form_errors:
@@ -2547,17 +2557,23 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
                 if locked_student is not None:
                     receipt.student = locked_student
 
+                if receipt.total_discount > total_amount:
+                    form_errors.append(
+                        f"The discount (৳{receipt.total_discount}) can't be more than "
+                        f"the total amount (৳{total_amount})."
+                    )
+
                 dup_error = self._check_duplicate_months(
                     receipt.student, items, exclude_pk=instance.pk if instance else None
                 )
                 if dup_error:
                     form_errors.append(dup_error)
-                else:
+
+                if not form_errors:
                     if not instance:
                         receipt.receipt_number = _generate_payment_receipt_number()
                     receipt.items = items
                     receipt.total_amount = total_amount
-                    receipt.total_discount = total_discount
                     receipt.save()
                     self.message_user(
                         request,
@@ -3119,25 +3135,25 @@ class TeacherSalaryAdmin(admin.ModelAdmin):
             pagesizes = importlib.import_module("reportlab.lib.pagesizes")
             units = importlib.import_module("reportlab.lib.units")
             platypus = importlib.import_module("reportlab.platypus")
-            styles_mod = importlib.import_module("reportlab.lib.styles")
+            styles_module = importlib.import_module("reportlab.lib.styles")
             enums = importlib.import_module("reportlab.lib.enums")
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "reportlab is required to generate salary slips. Install it with 'pip install reportlab'."
-            ) from exc
-
-        A4 = pagesizes.A4
-        mm = units.mm
-        SimpleDocTemplate = platypus.SimpleDocTemplate
-        Table = platypus.Table
-        TableStyle = platypus.TableStyle
-        Paragraph = platypus.Paragraph
-        Spacer = platypus.Spacer
-        Image = platypus.Image
-        getSampleStyleSheet = styles_mod.getSampleStyleSheet
-        ParagraphStyle = styles_mod.ParagraphStyle
-        TA_CENTER = enums.TA_CENTER
-        TA_RIGHT = enums.TA_RIGHT
+            A4 = pagesizes.A4
+            mm = units.mm
+            SimpleDocTemplate = platypus.SimpleDocTemplate
+            Table = platypus.Table
+            TableStyle = platypus.TableStyle
+            Paragraph = platypus.Paragraph
+            Spacer = platypus.Spacer
+            Image = platypus.Image
+            getSampleStyleSheet = styles_module.getSampleStyleSheet
+            ParagraphStyle = styles_module.ParagraphStyle
+            TA_CENTER = enums.TA_CENTER
+            TA_RIGHT = enums.TA_RIGHT
+        except ModuleNotFoundError:
+            return HttpResponse(
+                "ReportLab is not installed in this environment. Please install reportlab to generate salary slips.",
+                status=503,
+            )
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(

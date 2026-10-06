@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admission Form — {{ student.full_name }} — {{ academy_name }}</title>
+<style>
+  :root { --brand: #4e6933; --ink: #1A1A1A; --muted: #6B7280; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, Georgia, serif;
+    color: var(--ink);
+    margin: 0;
+    padding: 48px;
+    background: #f4f4f4;
+  }
+  .sheet {
+    max-width: 700px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 44px 48px;
+  }
+  .sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid var(--brand);
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+  }
+  .brand-mark { display: flex; align-items: center; gap: 12px; }
+  .brand-badge {
+    width: 40px; height: 40px;
+    background: var(--brand);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.3rem;
+    border-radius: 6px;
+  }
+  .brand-logo { width: 40px; height: 40px; object-fit: contain; }
+  .brand-name { font-size: 1.15rem; font-weight: bold; }
+  .sheet-label {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .sheet-id { font-size: 1.1rem; font-weight: bold; color: var(--ink); }
+
+  .top-row {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 30px;
+  }
+  .photo-box {
+    width: 110px;
+    height: 130px;
+    border: 1px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #fafafa;
+  }
+  .photo-box img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-box .placeholder { font-size: 0.72rem; color: var(--muted); text-align: center; padding: 8px; }
+
+  .name-block h2 { margin: 0 0 4px; font-size: 1.4rem; }
+  .name-block p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  .section-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--brand);
+    font-weight: bold;
+    border-bottom: 1px solid rgba(78,105,51,0.3);
+    padding-bottom: 6px;
+    margin: 26px 0 14px;
+  }
+  .section-title:first-of-type { margin-top: 0; }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 32px;
+  }
+  .meta-item .meta-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 4px;
+  }
+  .meta-item .meta-value { font-size: 0.98rem; font-weight: 600; margin: 0; }
+
+  .signoff {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 56px;
+  }
+  .signoff .line {
+    width: 220px;
+    border-top: 1px solid var(--ink);
+    padding-top: 6px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .sheet-footer {
+    border-top: 1px solid rgba(0,0,0,0.08);
+    padding-top: 16px;
+    margin-top: 40px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .print-bar { max-width: 700px; margin: 0 auto 16px; text-align: right; }
+  .print-btn {
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: bold;
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .print-btn:hover { opacity: 0.9; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .print-bar { display: none; }
+    .sheet { border: none; padding: 0; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-bar">
+  <button class="print-btn" onclick="window.print()">Print Admission Form</button>
+</div>
+
+<div class="sheet">
+  <div class="sheet-header">
+    <div class="brand-mark">
+      {% if ACADEMY_LOGO_URL %}
+      <img src="{{ ACADEMY_LOGO_URL }}" alt="{{ academy_name }}" class="brand-logo">
+      {% else %}
+      <span class="brand-badge">&pi;</span>
+      {% endif %}
+      <span class="brand-name">{{ academy_name }}</span>
+    </div>
+    <div class="sheet-label">
+      Admission Form<br>
+      <span class="sheet-id">{{ student.student_code }}</span>
+    </div>
+  </div>
+
+  <div class="top-row">
+    <div class="photo-box">
+      {% if student.photo_url %}
+      <img src="{{ student.photo_url }}" alt="{{ student.full_name }}">
+      {% else %}
+      <span class="placeholder">Photo not provided</span>
+      {% endif %}
+    </div>
+    <div class="name-block">
+      <h2>{{ student.full_name }}</h2>
+      <p>Student ID: {{ student.student_code }}</p>
+      <p>Admission Date: {{ student.admission_date|date:"d M Y"|default:"—" }}</p>
+    </div>
+  </div>
+
+  <p class="section-title">Class &amp; Batch</p>
+  <div class="meta-grid">
+    <div class="meta-item">
+      <p class="meta-label">Class</p>
+      <p class="meta-value">{{ student.class_obj.class_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Batch</p>
+      <p class="meta-value">{{ student.batch.batch_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Group / Year</p>
+      <p class="meta-value">{{ student.group|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Status</p>
+      <p class="meta-value">{{ student.status }}</p>
+    </div>
+  </div>
+
+  <p class="section-title">Student Details</p>
+  <div class="meta-grid">
+    <div class="meta-item">
+      <p class="meta-label">Gender</p>
+      <p class="meta-value">{{ student.gender|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Date of Birth</p>
+      <p class="meta-value">{{ student.date_of_birth|date:"d M Y"|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Student's Phone</p>
+      <p class="meta-value">{{ student.student_phone|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Address</p>
+      <p class="meta-value">{{ student.address|default:"—" }}</p>
+    </div>
+  </div>
+
+  <p class="section-title">Guardian Details</p>
+  <div class="meta-grid">
+    <div class="meta-item">
+      <p class="meta-label">Father's Name</p>
+      <p class="meta-value">{{ student.father_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Father's Phone</p>
+      <p class="meta-value">{{ student.father_phone|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Mother's Name</p>
+      <p class="meta-value">{{ student.mother_name|default:"—" }}</p>
+    </div>
+    <div class="meta-item">
+      <p class="meta-label">Mother's Phone</p>
+      <p class="meta-value">{{ student.mother_phone|default:"—" }}</p>
+    </div>
+  </div>
+
+  <div class="signoff">
+    <div class="line">Guardian's Signature</div>
+    <div class="line">Authorized Signature</div>
+  </div>
+
+  <div class="sheet-footer">
+    <span>Generated {{ generated_at|date:"d M Y, g:i A" }}</span>
+    <span>{{ academy_name }} &middot; This is a system-generated admission form</span>
+  </div>
+</div>
+
+</body>
+</html>

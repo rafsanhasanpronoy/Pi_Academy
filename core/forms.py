@@ -302,6 +302,7 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         fields = [
             "class_obj",
             "batch",
+            "group",
             "full_name",
             "photo_url",
             "gender",
@@ -335,6 +336,11 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["class_obj"].empty_label = "Select a class"
         self.fields["batch"].required = False
         self.fields["batch"].empty_label = "Select a batch (optional)"
+        self.fields["group"].required = False
+        self.fields["group"].label = "Group / Year"
+        self.fields["group"].widget = forms.TextInput(
+            attrs={"placeholder": "e.g. Science, Business Studies, Humanities, or Honours 1st Year"}
+        )
         self.fields["photo_url"].required = False
         self.fields["photo_url"].label = "Photo URL (or paste a link instead)"
         self.fields["photo_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
@@ -442,7 +448,10 @@ class StudentPaymentReceiptForm(TailwindStyledFormMixin, forms.ModelForm):
 
     class Meta:
         model = StudentPaymentReceipt
-        fields = ["student", "payment_date", "payment_method", "transaction_id", "remarks"]
+        fields = [
+            "student", "payment_date", "payment_method", "transaction_id",
+            "total_discount", "remarks",
+        ]
         widgets = {
             "payment_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "remarks": forms.Textarea(attrs={"rows": 2}),
@@ -456,11 +465,19 @@ class StudentPaymentReceiptForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["transaction_id"].help_text = "Bank/mobile-wallet transaction reference, if applicable."
         self.fields["remarks"].required = False
 
+        self.fields["total_discount"].required = False
+        self.fields["total_discount"].label = "Discount (৳)"
+        self.fields["total_discount"].help_text = "One discount applied to the whole receipt, not per item."
+        self.fields["total_discount"].widget.attrs["step"] = "1"
+
         if lock_student is not None:
             self.fields["student"].initial = lock_student.pk
             self.fields["student"].widget = forms.HiddenInput()
 
         self._style_fields()
+
+    def clean_total_discount(self):
+        return round(self.cleaned_data.get("total_discount") or 0)
 
 
 class TeacherSalaryForm(TailwindStyledFormMixin, forms.ModelForm):

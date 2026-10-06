@@ -7,7 +7,7 @@
 <style>
   .item-row {
     display: grid;
-    grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
+    grid-template-columns: 1.3fr 1fr 1fr auto;
     gap: 10px;
     align-items: end;
     padding: 14px 0;
@@ -90,7 +90,7 @@
 
   <div class="calc-summary" id="calcSummary">
     <div class="item"><span class="label">Total Amount</span><span class="value" id="calcTotal">৳0</span></div>
-    <div class="item"><span class="label">Total Discount</span><span class="value" id="calcDiscount">৳0</span></div>
+    <div class="item"><span class="label">Discount</span><span class="value" id="calcDiscount">৳0</span></div>
     <div class="item"><span class="label">Net Payable</span><span class="value" id="calcNet">৳0</span></div>
   </div>
 
@@ -128,6 +128,12 @@
         <p class="form-help">{{ form.transaction_id.help_text }}</p>
         {% if form.transaction_id.errors %}<div class="form-error">{{ form.transaction_id.errors.0 }}</div>{% endif %}
       </div>
+      <div class="form-field">
+        <label class="form-label" for="{{ form.total_discount.id_for_label }}">{{ form.total_discount.label }}</label>
+        {{ form.total_discount }}
+        <p class="form-help">{{ form.total_discount.help_text }}</p>
+        {% if form.total_discount.errors %}<div class="form-error">{{ form.total_discount.errors.0 }}</div>{% endif %}
+      </div>
     </div>
 
     <p class="form-section-label">Monthly Fee</p>
@@ -140,7 +146,7 @@
       </div>
 
       <div id="singleMonthPanel">
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end;">
+        <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
           <div>
             <span class="field-label">Month</span>
             <input type="month" id="singleMonthInput">
@@ -149,10 +155,6 @@
             <span class="field-label">Amount (৳)</span>
             <input type="number" id="singleMonthAmount" min="0" step="1" placeholder="e.g. 1500">
           </div>
-          <div>
-            <span class="field-label">Discount (৳)</span>
-            <input type="number" id="singleMonthDiscount" min="0" step="1" value="0">
-          </div>
           <button type="button" id="addSingleMonth" class="btn btn-accent btn-sm">Add</button>
         </div>
       </div>
@@ -160,23 +162,19 @@
       <div id="multiMonthPanel" style="display:none;">
         <span class="field-label">Select the months being paid for</span>
         <div id="multiMonthChecks" style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 16px;"></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
+        <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end;">
           <div>
             <span class="field-label">Amount per month (৳)</span>
             <input type="number" id="multiMonthAmount" min="0" step="1" placeholder="e.g. 1500">
           </div>
-          <div>
-            <span class="field-label">Discount (৳)</span>
-            <input type="number" id="multiMonthDiscount" min="0" step="1" value="0">
-          </div>
           <button type="button" id="addMultiMonths" class="btn btn-accent btn-sm">Add selected months</button>
         </div>
       </div>
-      <p class="form-help" style="margin-top:10px;">Each month you add here becomes its own row below — the same amount and discount applies to every month you select at once. You can still fine-tune or remove any row individually afterward.</p>
+      <p class="form-help" style="margin-top:10px;">Each month you add here becomes its own row below, all using the same amount. You can still fine-tune or remove any row individually afterward. Any discount is applied once, to the whole receipt — see the Discount field above.</p>
     </div>
 
     <p class="form-section-label">Other fees</p>
-    <p class="form-help" style="margin-bottom:10px;">Admission Fee, Exam Fee, Registration Fee, or anything else. Every row below — whether added here or by the Monthly Fee tool above — is part of this one receipt.</p>
+    <p class="form-help" style="margin-bottom:10px;">Admission Fee, Exam Fee, or anything else. Every row below — whether added here or by the Monthly Fee tool above — is part of this one receipt.</p>
 
     <div id="itemRows">
       {% for item in existing_items %}
@@ -196,10 +194,6 @@
         <div>
           <span class="field-label">Amount (৳)</span>
           <input type="number" name="item_amount[]" class="item-amount" min="0" step="1" value="{{ item.amount|floatformat:0 }}">
-        </div>
-        <div>
-          <span class="field-label">Discount (৳)</span>
-          <input type="number" name="item_discount[]" class="item-discount" min="0" step="1" value="{{ item.discount|floatformat:0 }}">
         </div>
         <button type="button" class="item-remove" aria-label="Remove row">&times;</button>
       </div>
@@ -242,10 +236,6 @@
       <span class="field-label">Amount (৳)</span>
       <input type="number" name="item_amount[]" class="item-amount" min="0" step="1" value="0">
     </div>
-    <div>
-      <span class="field-label">Discount (৳)</span>
-      <input type="number" name="item_discount[]" class="item-discount" min="0" step="1" value="0">
-    </div>
     <button type="button" class="item-remove" aria-label="Remove row">&times;</button>
   </div>
 </template>
@@ -255,6 +245,7 @@
   var rowsWrap = document.getElementById('itemRows');
   var addBtn = document.getElementById('addItemRow');
   var rowTemplate = document.getElementById('itemRowTemplate');
+  var discountInput = document.getElementById('{{ form.total_discount.id_for_label }}');
 
   var totalOut = document.getElementById('calcTotal');
   var discountOut = document.getElementById('calcDiscount');
@@ -266,14 +257,19 @@
   }
 
   function recalc() {
-    var total = 0, discount = 0;
+    var total = 0;
     rowsWrap.querySelectorAll('.item-row').forEach(function (row) {
       total += num(row.querySelector('.item-amount'));
-      discount += num(row.querySelector('.item-discount'));
     });
+    var discount = num(discountInput);
+
     totalOut.textContent = '৳' + Math.round(total);
     discountOut.textContent = '৳' + Math.round(discount);
     netOut.textContent = '৳' + Math.round(total - discount);
+  }
+
+  if (discountInput) {
+    discountInput.addEventListener('input', recalc);
   }
 
   function wireRow(row) {
@@ -295,19 +291,17 @@
         row.remove();
         recalc();
       } else {
-        row.querySelectorAll('.item-amount, .item-discount').forEach(function (el) { el.value = 0; });
+        row.querySelector('.item-amount').value = 0;
         recalc();
       }
     });
 
-    row.querySelectorAll('.item-amount, .item-discount').forEach(function (el) {
-      el.addEventListener('input', recalc);
-    });
+    row.querySelector('.item-amount').addEventListener('input', recalc);
   }
 
   rowsWrap.querySelectorAll('.item-row').forEach(wireRow);
 
-  function addRow(type, month, amount, discount) {
+  function addRow(type, month, amount) {
     var clone = rowTemplate.content.cloneNode(true);
     rowsWrap.appendChild(clone);
     var row = rowsWrap.lastElementChild;
@@ -321,12 +315,11 @@
       row.querySelector('.item-month-wrap input').value = month;
     }
     row.querySelector('.item-amount').value = amount || 0;
-    row.querySelector('.item-discount').value = discount || 0;
     return row;
   }
 
   addBtn.addEventListener('click', function () {
-    addRow(null, null, 0, 0);
+    addRow(null, null, 0);
     recalc();
   });
 
@@ -353,7 +346,6 @@
   document.getElementById('addSingleMonth').addEventListener('click', function () {
     var monthEl = document.getElementById('singleMonthInput');
     var amountEl = document.getElementById('singleMonthAmount');
-    var discountEl = document.getElementById('singleMonthDiscount');
 
     if (!monthEl.value) {
       monthEl.focus();
@@ -364,12 +356,11 @@
       return;
     }
 
-    addRow('Monthly Fee', monthEl.value, amountEl.value, discountEl.value);
+    addRow('Monthly Fee', monthEl.value, amountEl.value);
     recalc();
 
     monthEl.value = '';
     amountEl.value = '';
-    discountEl.value = 0;
   });
 
   // Multiple months — a checkbox per month, 3 months back to 8 months
@@ -397,7 +388,6 @@
 
   document.getElementById('addMultiMonths').addEventListener('click', function () {
     var amountEl = document.getElementById('multiMonthAmount');
-    var discountEl = document.getElementById('multiMonthDiscount');
     var checked = Array.prototype.slice.call(
       multiChecks.querySelectorAll('.multi-month-check:checked')
     );
@@ -409,13 +399,12 @@
     }
 
     checked.forEach(function (cb) {
-      addRow('Monthly Fee', cb.value, amountEl.value, discountEl.value);
+      addRow('Monthly Fee', cb.value, amountEl.value);
       cb.checked = false;
     });
     recalc();
 
     amountEl.value = '';
-    discountEl.value = 0;
   });
 
   recalc();
