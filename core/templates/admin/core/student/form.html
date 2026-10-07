@@ -89,9 +89,19 @@
         {% for error in form.gender.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
       </div>
       <div class="form-field">
-        <label for="{{ form.date_of_birth.id_for_label }}" class="form-label">Date of birth</label>
+        <label for="{{ form.date_of_birth.id_for_label }}" class="form-label">Date of birth{% if form.date_of_birth.field.required %} *{% endif %}</label>
         {{ form.date_of_birth }}
         {% for error in form.date_of_birth.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="form-field">
+        <label for="{{ form.blood_group.id_for_label }}" class="form-label">Blood group{% if form.blood_group.field.required %} *{% endif %}</label>
+        {{ form.blood_group }}
+        {% for error in form.blood_group.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="form-field">
+        <label for="{{ form.institution_name.id_for_label }}" class="form-label">School / College name{% if form.institution_name.field.required %} *{% endif %}</label>
+        {{ form.institution_name }}
+        {% for error in form.institution_name.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
       </div>
       <div class="form-field">
         <label for="{{ form.student_phone.id_for_label }}" class="form-label">Student's phone</label>
@@ -99,7 +109,7 @@
         {% for error in form.student_phone.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
       </div>
       <div class="form-field">
-        <label for="{{ form.admission_date.id_for_label }}" class="form-label">Admission date</label>
+        <label for="{{ form.admission_date.id_for_label }}" class="form-label">Admission date{% if form.admission_date.field.required %} *{% endif %}</label>
         {{ form.admission_date }}
         {% for error in form.admission_date.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
       </div>
@@ -129,6 +139,13 @@
       <div class="form-field full-width">
         <label for="{{ form.address.id_for_label }}" class="form-label">Address</label>
         {{ form.address }}
+      </div>
+
+      <p class="form-section-label">Reference</p>
+      <div class="form-field full-width">
+        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+        {{ form.reference }}
+        {% for error in form.reference.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
       </div>
 
     </div>

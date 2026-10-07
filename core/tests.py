@@ -460,3 +460,57 @@ class ExpenseAdminTests(TestCase):
         self.assertEqual(finance["month"]["expenses"], 800)
         self.assertEqual(finance["month"]["net"], -800)
         self.assertContains(response, "Net revenue")
+
+
+class StudentAdmissionFieldsTests(TestCase):
+    def setUp(self):
+        self.klass = Class.objects.create(class_name="Class 8", academic_year=2026)
+
+    def _data(self, **overrides):
+        data = {
+            "class_obj": self.klass.pk, "full_name": "Rahim Uddin",
+            "date_of_birth": "2012-03-10", "admission_date": date.today().isoformat(),
+            "institution_name": "Dhaka Residential School", "blood_group": "O+",
+            "reference": "", "status": "Active",
+        }
+        data.update(overrides)
+        return data
+
+    def test_valid_new_admission_with_reference_left_blank(self):
+        from .forms import StudentForm
+        self.assertTrue(StudentForm(data=self._data()).is_valid())
+
+    def test_new_admission_requires_dob_admission_date_school_and_blood_group(self):
+        from .forms import StudentForm
+        for field in ("date_of_birth", "admission_date", "institution_name", "blood_group"):
+            form = StudentForm(data=self._data(**{field: ""}))
+            self.assertFalse(form.is_valid(), field)
+            self.assertIn(field, form.errors)
+
+    def test_invalid_blood_group_rejected(self):
+        from .forms import StudentForm
+        self.assertFalse(StudentForm(data=self._data(blood_group="Z+")).is_valid())
+
+    def test_legacy_student_without_new_fields_can_still_be_edited(self):
+        from .forms import StudentForm
+        legacy = Student.objects.create(
+            student_code="PiC8B0001", class_obj=self.klass, full_name="Old Student",
+        )
+        form = StudentForm(
+            data={"class_obj": self.klass.pk, "full_name": "Old Student", "status": "Left"},
+            instance=legacy,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_existing_value_cannot_be_blanked_out(self):
+        from .forms import StudentForm
+        student = Student.objects.create(
+            student_code="PiC8B0002", class_obj=self.klass, full_name="Has Data",
+            blood_group="A+", institution_name="X School",
+            date_of_birth=date(2012, 1, 1), admission_date=date.today(),
+        )
+        form = StudentForm(
+            data=self._data(full_name="Has Data", blood_group=""), instance=student,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("blood_group", form.errors)

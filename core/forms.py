@@ -298,6 +298,10 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         help_text="Optional. Uploading a file replaces whatever is in Photo URL below.",
     )
 
+    REQUIRED_ADMISSION_FIELDS = (
+        "date_of_birth", "admission_date", "institution_name", "blood_group",
+    )
+
     class Meta:
         model = Student
         fields = [
@@ -308,6 +312,8 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
             "photo_url",
             "gender",
             "date_of_birth",
+            "blood_group",
+            "institution_name",
             "student_phone",
             "father_name",
             "father_phone",
@@ -315,6 +321,7 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
             "mother_phone",
             "address",
             "admission_date",
+            "reference",
             "status",
         ]
         widgets = {
@@ -346,8 +353,28 @@ class StudentForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["photo_url"].label = "Photo URL (or paste a link instead)"
         self.fields["photo_url"].widget = forms.TextInput(attrs={"placeholder": "https://..."})
         for name in ("student_phone", "father_name", "father_phone",
-                     "mother_name", "mother_phone", "address", "admission_date"):
+                     "mother_name", "mother_phone", "address"):
             self.fields[name].required = False
+
+        self.fields["institution_name"].label = "School / College name"
+        self.fields["institution_name"].widget = forms.TextInput(
+            attrs={"placeholder": "Where the student currently studies"}
+        )
+        self.fields["blood_group"].label = "Blood group"
+        self.fields["blood_group"].choices = [("", "Select blood group")] + list(Student.BLOOD_GROUPS)
+        self.fields["reference"].label = "Reference (optional)"
+        self.fields["reference"].widget = forms.TextInput(
+            attrs={"placeholder": "Who referred this student, if anyone"}
+        )
+        self.fields["reference"].required = False
+
+        # Required on every new admission. When editing an older record
+        # that never had one of these filled in, don't block the save
+        # (e.g. just to mark the student Left) — only insist on it if it
+        # was already there, so it can't be blanked out afterwards.
+        for name in self.REQUIRED_ADMISSION_FIELDS:
+            had_value = bool(self.instance.pk and getattr(self.instance, name))
+            self.fields[name].required = (not self.instance.pk) or had_value
 
         self._style_fields()
 

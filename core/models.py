@@ -475,6 +475,13 @@ class StudentPaymentReceipt(models.Model):
 
 
 class Student(models.Model):
+    BLOOD_GROUPS = [
+        ("A+", "A+"), ("A-", "A-"),
+        ("B+", "B+"), ("B-", "B-"),
+        ("AB+", "AB+"), ("AB-", "AB-"),
+        ("O+", "O+"), ("O-", "O-"),
+    ]
+
     id = models.BigAutoField(primary_key=True)
     student_code = models.CharField(unique=True, max_length=30)
     class_obj = models.ForeignKey(Class, models.DO_NOTHING, db_column='class_id')
@@ -488,6 +495,12 @@ class Student(models.Model):
     photo_url = models.TextField(blank=True, null=True)
     gender = models.CharField(max_length=20, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
+    # The school or college the student currently attends. Needs the
+    # columns added by sql/add_student_admission_fields.sql.
+    institution_name = models.CharField(max_length=200, blank=True, null=True)
+    blood_group = models.CharField(max_length=5, choices=BLOOD_GROUPS, blank=True, null=True)
+    # Who referred this student (a person, another student, an ad...). Optional.
+    reference = models.CharField(max_length=200, blank=True, null=True)
     student_phone = models.CharField(max_length=20, blank=True, null=True)
     father_name = models.CharField(max_length=150, blank=True, null=True)
     father_phone = models.CharField(max_length=20, blank=True, null=True)
