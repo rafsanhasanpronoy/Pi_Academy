@@ -514,3 +514,110 @@ class StudentAdmissionFieldsTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("blood_group", form.errors)
+
+
+class StudentBulkUploadNewFieldsTests(TestCase):
+    """Bulk upload with the School/College, Blood Group and Reference
+    columns, plus the cell-cleaning fixes (phones, dates, status)."""
+
+    from .admin import BULK_STUDENT_HEADERS as NEW_HEADERS  # 17 columns
+
+    def setUp(self):
+        self.admin = StudentAdmin(Student, admin.site)
+        self.klass = Class.objects.create(class_name="Class 6", academic_year=2026)
+        Batch.objects.create(class_obj=self.klass, batch_name="Morning")
+
+    def _row(self, **o):
+        row = {
+            "name": "Jane Doe", "gender": "Female", "dob": "2014-05-12",
+            "phone": "01700000000", "adm": "2026-01-10", "status": "Active",
+            "school": "Dhaka Residential School", "blood": "O+", "ref": "",
+        }
+        row.update(o)
+        return [
+            row["name"], "Class 6", 2026, "Morning", row["gender"], row["dob"],
+            row["phone"], "", "", "", "", "", row["adm"], row["status"],
+            row["school"], row["blood"], row["ref"],
+        ]
+
+    def _run(self, *rows):
+        return self.admin._process_bulk_upload(_make_xlsx(self.NEW_HEADERS, list(rows)))
+
+    def test_template_has_seventeen_columns_new_ones_last(self):
+        self.assertEqual(len(self.NEW_HEADERS), 17)
+        self.assertEqual(self.NEW_HEADERS[14:], [
+            "School / College Name", "Blood Group", "Reference (optional)",
+        ])
+
+    def test_new_fields_are_saved(self):
+        result = self._run(self._row(ref="Karim sir"))
+        self.assertEqual(result["errors"], [])
+        s = Student.objects.get(full_name="Jane Doe")
+        self.assertEqual((s.institution_name, s.blood_group, s.reference),
+                         ("Dhaka Residential School", "O+", "Karim sir"))
+
+    def test_reference_is_optional(self):
+        self.assertEqual(self._run(self._row(ref=""))["created_count"], 1)
+
+    def test_blood_group_is_normalized(self):
+        self._run(self._row(blood=" ab - "))
+        self.assertEqual(Student.objects.get().blood_group, "AB-")
+
+    def test_unknown_blood_group_is_skipped_with_error(self):
+        result = self._run(self._row(blood="Z+"))
+        self.assertEqual(result["created_count"], 0)
+        self.assertTrue(any("Blood Group" in e for e in result["errors"]))
+
+    def test_required_fields_enforced_with_new_template(self):
+        for field, label in (("dob", "Date of Birth"), ("adm", "Admission Date"),
+                             ("school", "School / College Name"), ("blood", "Blood Group")):
+            Student.objects.all().delete()
+            result = self._run(self._row(**{field: ""}))
+            self.assertEqual(result["created_count"], 0, field)
+            self.assertTrue(any(label in e for e in result["errors"]), field)
+
+    def test_old_14_column_file_still_accepted_without_new_fields(self):
+        legacy = StudentBulkUploadTests.HEADERS
+        upload = _make_xlsx(legacy, [[
+            "Old Style", "Class 6", 2026, "Morning", "", "", "", "", "", "", "", "", "", "Active",
+        ]])
+        result = self.admin._process_bulk_upload(upload)
+        self.assertEqual(result["created_count"], 1)
+        self.assertEqual(result["errors"], [])
+
+    def test_partial_or_misnamed_new_columns_rejected(self):
+        headers = StudentBulkUploadTests.HEADERS + ["School / College Name", "Wrong", "Reference (optional)"]
+        result = self.admin._process_bulk_upload(_make_xlsx(headers, []))
+        self.assertEqual(result["created_count"], 0)
+        self.assertTrue(any("new columns" in e for e in result["errors"]))
+
+    def test_numeric_phone_cells_get_their_leading_zero_back(self):
+        self._run(self._row(phone=1700000000), )
+        self.assertEqual(Student.objects.get().student_phone, "01700000000")
+        Student.objects.all().delete()
+        self._run(self._row(phone=1700000000.0))
+        self.assertEqual(Student.objects.get().student_phone, "01700000000")
+
+    def test_unreadable_date_is_flagged_not_dropped(self):
+        result = self._run(self._row(dob="12th May"))
+        self.assertEqual(result["created_count"], 0)
+        self.assertTrue(any("Date of Birth" in e for e in result["errors"]))
+
+    def test_unknown_status_and_gender_are_flagged_not_defaulted(self):
+        result = self._run(self._row(status="Enrolled"), self._row(name="B", gender="Robot"))
+        self.assertEqual(result["created_count"], 0)
+        self.assertTrue(any("Status" in e for e in result["errors"]))
+        self.assertTrue(any("Gender" in e for e in result["errors"]))
+
+    def test_downloaded_template_matches_upload_format(self):
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.create_superuser("boss", "b@x.com", "pw12345!")
+        self.client.force_login(user)
+        response = self.client.get(reverse("admin:core_student_bulk_template"))
+        self.assertEqual(response.status_code, 200)
+        sheet = openpyxl.load_workbook(BytesIO(response.content)).active
+        self.assertEqual([c.value for c in sheet[1]], self.NEW_HEADERS)
+        # the sample row in the template must itself upload cleanly
+        result = self.admin._process_bulk_upload(BytesIO(response.content))
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["created_count"], 1)

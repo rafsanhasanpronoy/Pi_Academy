@@ -20,6 +20,9 @@
   <p style="font-size:0.9rem; color:var(--muted); margin:0 0 16px;">
     Fill in one row per student below the header row. Class Name and Academic Year must match an existing class exactly (e.g. "Class 6" and 2026). Batch Name is optional — leave it blank if the student isn't in a batch yet.
   </p>
+  <p style="font-size:0.9rem; color:var(--muted); margin:0 0 16px;">
+    <strong>Required for every student:</strong> Date of Birth, Admission Date, School / College Name and Blood Group (pick from the dropdown: A+, A-, B+, B-, AB+, AB-, O+, O-). Reference is optional. Dates must be written as YYYY-MM-DD. Rows missing a required value are skipped and listed after the upload. Files saved from the older template (without the last three columns) are still accepted.
+  </p>
   <a href="{% url 'admin:core_student_bulk_template' %}" class="btn btn-ghost">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
     Download template (.xlsx)

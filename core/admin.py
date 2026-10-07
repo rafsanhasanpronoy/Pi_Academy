@@ -715,7 +715,7 @@ def _generate_payment_receipt_number():
 # since the upload view reads cells by position after checking these
 # headers match. Keep this in sync with the template generator and the
 # row parser below.
-BULK_STUDENT_HEADERS = [
+BULK_STUDENT_LEGACY_HEADERS = [
     "Full Name",
     "Class Name",
     "Academic Year",
@@ -731,6 +731,45 @@ BULK_STUDENT_HEADERS = [
     "Admission Date (YYYY-MM-DD)",
     "Status",
 ]
+
+# Added later, always at the END so a file saved from the old 14-column
+# template is still accepted (its new fields simply stay empty). When a
+# file does include these columns, the same required fields as the
+# Add Student form are enforced — see _process_bulk_upload.
+BULK_STUDENT_NEW_HEADERS = [
+    "School / College Name",
+    "Blood Group",
+    "Reference (optional)",
+]
+
+BULK_STUDENT_HEADERS = BULK_STUDENT_LEGACY_HEADERS + BULK_STUDENT_NEW_HEADERS
+
+
+def _clean_phone(value):
+    """Excel stores a typed phone number as a NUMBER, which drops the
+    leading zero (01700000000 -> 1700000000) and can arrive as a float
+    (1700000000.0). Turn it back into the text people meant."""
+    if value in (None, ""):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    text = str(value).strip()
+    # A 10-digit number starting with 1 is a Bangladeshi mobile number
+    # that lost its leading 0.
+    if text.isdigit() and len(text) == 10 and text.startswith("1"):
+        text = "0" + text
+    return text
+
+
+def _parse_blood_group(value):
+    """'o +', 'AB-', 'a+' -> 'O+', 'AB-', 'A+'. Returns "" for a blank
+    cell and None for something that isn't a real blood group."""
+    if value in (None, ""):
+        return ""
+    text = str(value).strip().upper().replace(" ", "")
+    text = text.replace("\u2212", "-").replace("\u2013", "-")
+    valid = {code for code, _label in Student.BLOOD_GROUPS}
+    return text if text in valid else None
 
 
 def _parse_bulk_date(value):
@@ -979,9 +1018,27 @@ class StudentAdmin(admin.ModelAdmin):
             "2014-05-12", "01700000000", "John Doe", "01700000001",
             "Mary Doe", "01700000002", "House 12, Road 4, Dhaka",
             "2026-01-10", "Active",
+            "Dhaka Residential School", "O+", "",
         ])
         for col_idx in range(1, len(BULK_STUDENT_HEADERS) + 1):
-            sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 22
+            sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 24
+
+        # Phone columns as plain text, so Excel doesn't strip the leading 0.
+        last_row = 500
+        for col_letter in ("G", "I", "K"):
+            for row_idx in range(2, last_row + 1):
+                sheet[f"{col_letter}{row_idx}"].number_format = "@"
+
+        # Blood group as a dropdown (column P).
+        from openpyxl.worksheet.datavalidation import DataValidation
+        blood_codes = ",".join(code for code, _label in Student.BLOOD_GROUPS)
+        blood_validation = DataValidation(
+            type="list", formula1=f'"{blood_codes}"', allow_blank=True,
+            showErrorMessage=True, errorTitle="Blood group",
+            error="Pick one of: " + blood_codes.replace(",", ", "),
+        )
+        sheet.add_data_validation(blood_validation)
+        blood_validation.add(f"P2:P{last_row}")
 
         buffer = BytesIO()
         workbook.save(buffer)
@@ -1035,12 +1092,25 @@ class StudentAdmin(admin.ModelAdmin):
 
         sheet = workbook.active
         header_row = [str(c.value).strip() if c.value is not None else "" for c in sheet[1]]
-        expected = [h.split(" (")[0] for h in BULK_STUDENT_HEADERS]
-        got = [h.split(" (")[0] for h in header_row[:len(expected)]]
+        legacy_count = len(BULK_STUDENT_LEGACY_HEADERS)
+        expected = [h.split(" (")[0] for h in BULK_STUDENT_LEGACY_HEADERS]
+        got = [h.split(" (")[0] for h in header_row[:legacy_count]]
         if got != expected:
             return {"created_count": 0, "created": [], "errors": [
                 "The column headers don't match the template. Please download "
                 "the template below and use it as-is, filling in rows beneath it."
+            ]}
+
+        # Old 14-column files are still accepted. If ANY of the newer
+        # columns are present, all three must be there and correctly named.
+        expected_new = [h.split(" (")[0] for h in BULK_STUDENT_NEW_HEADERS]
+        got_new = [h.split(" (")[0] for h in header_row[legacy_count:len(BULK_STUDENT_HEADERS)]]
+        has_new_columns = any(got_new)
+        if has_new_columns and got_new != expected_new:
+            return {"created_count": 0, "created": [], "errors": [
+                "The new columns (School / College Name, Blood Group, Reference) "
+                "don't match the template. Please download the latest template "
+                "and use it as-is."
             ]}
 
         created = []
@@ -1054,7 +1124,8 @@ class StudentAdmin(admin.ModelAdmin):
 
             (full_name, class_name, academic_year, batch_name, gender,
              dob, phone, father_name, father_phone, mother_name,
-             mother_phone, address, admission_date, status) = (
+             mother_phone, address, admission_date, status,
+             institution_name, blood_group_raw, reference) = (
                 list(row) + [None] * (len(BULK_STUDENT_HEADERS) - len(row))
             )[:len(BULK_STUDENT_HEADERS)]
 
@@ -1094,23 +1165,78 @@ class StudentAdmin(admin.ModelAdmin):
                     continue
 
             resolved_gender = gender_values.get(str(gender).strip().lower()) if gender else ""
+            if gender and not resolved_gender:
+                errors.append(
+                    f"Row {row_num} ({full_name}): unknown Gender '{gender}' — "
+                    f"use Male, Female or Other. Skipped."
+                )
+                continue
             resolved_status = status_values.get(str(status).strip().lower()) if status else "Active"
             if status and not resolved_status:
-                resolved_status = "Active"
+                errors.append(
+                    f"Row {row_num} ({full_name}): unknown Status '{status}' — "
+                    f"use {', '.join(status_values.values())}. Skipped."
+                )
+                continue
+
+            # A date typed in a format we can't read used to be dropped
+            # silently — flag it instead so it doesn't quietly go missing.
+            dob_date = _parse_bulk_date(dob)
+            admission_dt = _parse_bulk_date(admission_date)
+            bad_date = next((
+                label for label, raw, parsed in (
+                    ("Date of Birth", dob, dob_date),
+                    ("Admission Date", admission_date, admission_dt),
+                ) if raw not in (None, "") and parsed is None
+            ), None)
+            if bad_date:
+                errors.append(
+                    f"Row {row_num} ({full_name}): couldn't read the {bad_date} — "
+                    f"use YYYY-MM-DD (e.g. 2014-05-12). Skipped."
+                )
+                continue
+
+            blood_group = _parse_blood_group(blood_group_raw)
+            if blood_group is None:
+                errors.append(
+                    f"Row {row_num} ({full_name}): unknown Blood Group '{blood_group_raw}' — "
+                    f"use one of {', '.join(code for code, _l in Student.BLOOD_GROUPS)}. Skipped."
+                )
+                continue
+            institution = str(institution_name).strip() if institution_name else ""
+
+            # Same required fields as the Add Student form — only enforced
+            # for files that use the new template, so old saved 14-column
+            # files keep working.
+            if has_new_columns:
+                missing = [label for label, value in (
+                    ("Date of Birth", dob_date),
+                    ("Admission Date", admission_dt),
+                    ("School / College Name", institution),
+                    ("Blood Group", blood_group),
+                ) if not value]
+                if missing:
+                    errors.append(
+                        f"Row {row_num} ({full_name}): missing {', '.join(missing)} — skipped."
+                    )
+                    continue
 
             student = Student(
                 class_obj=class_obj,
                 batch=batch,
                 full_name=full_name,
                 gender=resolved_gender,
-                date_of_birth=_parse_bulk_date(dob),
-                student_phone=str(phone).strip() if phone else "",
+                date_of_birth=dob_date,
+                student_phone=_clean_phone(phone),
                 father_name=str(father_name).strip() if father_name else "",
-                father_phone=str(father_phone).strip() if father_phone else "",
+                father_phone=_clean_phone(father_phone),
                 mother_name=str(mother_name).strip() if mother_name else "",
-                mother_phone=str(mother_phone).strip() if mother_phone else "",
+                mother_phone=_clean_phone(mother_phone),
                 address=str(address).strip() if address else "",
-                admission_date=_parse_bulk_date(admission_date),
+                admission_date=admission_dt,
+                institution_name=institution,
+                blood_group=blood_group,
+                reference=str(reference).strip() if reference else "",
                 status=resolved_status,
             )
             try:
