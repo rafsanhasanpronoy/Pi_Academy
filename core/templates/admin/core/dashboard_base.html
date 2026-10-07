@@ -446,6 +446,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="m8.5 14 2 2 4-4"/></svg>
       Salary Status
     </a>
+    <a href="{% url 'admin:core_expense_changelist' %}" class="nav-link {% if active_page == 'expense_list' or active_page == 'expense_add' or active_page == 'expense_edit' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+      Other Expenses
+    </a>
 
     <p class="nav-section-label">Website Content</p>
     <a href="/admin/core/notice/" class="nav-link">

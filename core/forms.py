@@ -3,10 +3,11 @@ from datetime import date
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from .models import (
     Achievement, AdmissionInfo, AdmissionInquiry, Batch, Class, ClassSchedule,
-    ContactMessage, Exam, ExamResult, Faculty, Gallery, GallerySection, GallerySubsection,
+    ContactMessage, Exam, ExamResult, Expense, Faculty, Gallery, GallerySection, GallerySubsection,
     Notice, Student, StudentPayment, StudentPaymentReceipt, Subject, TeacherSalary,
 )
 
@@ -1126,3 +1127,41 @@ class ContactMessageAdminForm(TailwindStyledFormMixin, forms.ModelForm):
                 "Please provide a phone number or an email so there's a way to reply."
             )
         return cleaned_data
+
+
+class ExpenseForm(TailwindStyledFormMixin, forms.ModelForm):
+    """Used by admin.ExpenseAdmin's custom add/change views."""
+
+    class Meta:
+        model = Expense
+        fields = ["title", "category", "amount", "expense_date", "payment_method", "remarks"]
+        widgets = {
+            "expense_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "remarks": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["expense_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["remarks"].required = False
+        self.fields["title"].label = "What was it for?"
+        self.fields["title"].widget.attrs.setdefault("placeholder", "e.g. Office rent, Whiteboard markers")
+        self.fields["amount"].label = "Amount (৳)"
+        # Whole taka only, same as receipts and salaries.
+        self.fields["amount"].widget.attrs["step"] = "1"
+        self.fields["amount"].widget.attrs["min"] = "1"
+        if not self.instance.pk:
+            self.fields["expense_date"].initial = timezone.localdate()
+        self._style_fields()
+
+    def clean_amount(self):
+        amount = round(self.cleaned_data.get("amount") or 0)
+        if amount <= 0:
+            raise ValidationError("Enter an amount greater than ৳0.")
+        return amount
+
+    def clean_expense_date(self):
+        spent_on = self.cleaned_data.get("expense_date")
+        if spent_on and spent_on > timezone.localdate():
+            raise ValidationError("Expense date can't be in the future.")
+        return spent_on

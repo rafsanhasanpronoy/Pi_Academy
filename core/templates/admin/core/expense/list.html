@@ -1,0 +1,151 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}Other Expenses — Dashboard{% endblock %}
+{% block crumb %}Other Expenses{% endblock %}
+
+{% block extra_head %}
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+  }
+  .stat-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 4px;
+  }
+  .stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text); line-height: 1.1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Other Expenses</h1>
+    <p class="page-sub">Rent, utilities, supplies and anything else the academy spends besides teacher salaries</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_expense_add' %}" class="btn btn-accent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+      Add Expense
+    </a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <p class="stat-label">Matching expenses</p>
+    <p class="stat-value">{{ cards.count }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Total (current filter)</p>
+    <p class="stat-value">৳{{ cards.filtered_total|floatformat:0 }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Spent this month</p>
+    <p class="stat-value">৳{{ cards.this_month_total|floatformat:0 }}</p>
+  </div>
+</div>
+
+<div class="panel" style="padding: 18px 22px; margin-bottom: 20px;">
+  <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+    <div style="flex: 2; min-width: 200px;">
+      <label class="form-label" for="id_q">Search</label>
+      <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Title or remarks">
+    </div>
+    <div style="flex: 1; min-width: 160px;">
+      <label class="form-label" for="id_category">Category</label>
+      <select id="id_category" name="category">
+        <option value="">All categories</option>
+        {% for value, label in category_choices %}
+        <option value="{{ value }}" {% if active_category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 150px;">
+      <label class="form-label" for="id_month">Month</label>
+      <input type="month" id="id_month" name="month" value="{{ month_param }}">
+    </div>
+    <div class="row-actions">
+      <button type="submit" class="btn btn-accent btn-sm">Filter</button>
+      <a href="{% url 'admin:core_expense_changelist' %}" class="btn btn-ghost btn-sm">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  {% if expenses %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Amount</th>
+        <th>Method</th>
+        <th style="width:170px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for expense in expenses %}
+      <tr>
+        <td>{{ expense.expense_date|date:"d M Y" }}</td>
+        <td>
+          <span style="font-weight:600;">{{ expense.title }}</span>
+          {% if expense.remarks %}<br><span style="color:var(--muted); font-size:0.82rem;">{{ expense.remarks|truncatechars:70 }}</span>{% endif %}
+        </td>
+        <td><span class="pill">{{ expense.get_category_display }}</span></td>
+        <td style="font-weight:700;">৳{{ expense.amount|floatformat:0 }}</td>
+        <td>{{ expense.get_payment_method_display }}</td>
+        <td>
+          <div class="row-actions">
+            <a href="{% url 'admin:core_expense_change' expense.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+            <form method="post" action="{% url 'admin:core_expense_delete' expense.pk %}" onsubmit="return confirm('Delete this expense? This cannot be undone.');" style="margin:0;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10.5h19"/></svg>
+    <p>No expenses recorded yet.</p>
+    <a href="{% url 'admin:core_expense_add' %}" class="btn btn-accent btn-sm" style="margin-top:10px;">Add Expense</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="row-actions" style="justify-content:center; margin-top:22px;">
+  {% if page_obj.has_previous %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  {% for p in page_range %}
+    {% if p %}
+      <a class="btn {% if p == page_obj.number %}btn-accent{% else %}btn-ghost{% endif %} btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ p }}">{{ p }}</a>
+    {% else %}
+      <span style="padding: 0 4px; color: var(--muted);">&hellip;</span>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

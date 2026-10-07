@@ -250,6 +250,53 @@ class Exam(models.Model):
         return f"{self.exam_name} — {self.class_obj.class_name}"
 
 
+class Expense(models.Model):
+    """Any money the academy spends that isn't a teacher salary — rent,
+    utilities, supplies, repairs, and so on. Teacher salaries are already
+    tracked in TeacherSalary, so the dashboard adds the two together to
+    get total expenses.
+
+    The `expenses` table must exist in the database (Django doesn't
+    manage it, like every other model here) — see
+    sql/create_expenses_table.sql.
+    """
+
+    CATEGORIES = [
+        ("Rent", "Rent"),
+        ("Utilities", "Utilities (electricity, internet, water)"),
+        ("Supplies", "Supplies & Stationery"),
+        ("Maintenance", "Maintenance & Repairs"),
+        ("Marketing", "Marketing & Advertising"),
+        ("Equipment", "Equipment"),
+        ("Events", "Events & Refreshments"),
+        ("Other", "Other"),
+    ]
+    PAYMENT_METHODS = [
+        ("Cash", "Cash"),
+        ("Bank", "Bank Transfer"),
+        ("Bkash", "bKash"),
+        ("Nagad", "Nagad"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=200)
+    category = models.CharField(max_length=30, choices=CATEGORIES, default="Other")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    expense_date = models.DateField()
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="Cash")
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'expenses'
+        verbose_name = 'Expense'
+        verbose_name_plural = 'Expenses'
+
+    def __str__(self):
+        return f"{self.title} ({self.amount})"
+
+
 class Faculty(models.Model):
     id = models.BigAutoField(primary_key=True)
     full_name = models.CharField(max_length=150)

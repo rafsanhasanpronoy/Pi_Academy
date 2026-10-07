@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from io import BytesIO
 
 import openpyxl
@@ -6,10 +7,11 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .admin import ExamResultAdmin, StudentAdmin
-from .forms import AdmissionInquiryForm, ContactMessageForm, StudentLookupForm
+from .admin import ExamResultAdmin, StudentAdmin, _finance_summary
+from .forms import AdmissionInquiryForm, ContactMessageForm, ExpenseForm, StudentLookupForm
 from .models import (
-    Attendance, Batch, Class, Exam, ExamResult, Student, Subject,
+    Attendance, Batch, Class, Exam, ExamResult, Expense, Faculty, Student,
+    StudentPayment, StudentPaymentReceipt, Subject, TeacherSalary,
 )
 
 
@@ -314,3 +316,147 @@ class ExamResultBulkUploadTests(TestCase):
         result = self.admin._process_bulk_upload(upload, self.exam)
         self.assertEqual(result["saved_count"], 0)
         self.assertTrue(any("no student" in e for e in result["errors"]))
+
+
+class ExpenseFormTests(TestCase):
+    def _data(self, **overrides):
+        data = {
+            "title": "Office rent",
+            "category": "Rent",
+            "amount": "12000",
+            "expense_date": date.today().isoformat(),
+            "payment_method": "Cash",
+            "remarks": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_valid_expense(self):
+        self.assertTrue(ExpenseForm(data=self._data()).is_valid())
+
+    def test_zero_and_negative_amounts_rejected(self):
+        self.assertFalse(ExpenseForm(data=self._data(amount="0")).is_valid())
+        self.assertFalse(ExpenseForm(data=self._data(amount="-50")).is_valid())
+
+    def test_future_date_rejected(self):
+        future = (date.today() + timedelta(days=3)).isoformat()
+        self.assertFalse(ExpenseForm(data=self._data(expense_date=future)).is_valid())
+
+    def test_amount_is_rounded_to_whole_taka(self):
+        form = ExpenseForm(data=self._data(amount="150.40"))
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["amount"], 150)
+
+
+class FinanceSummaryTests(TestCase):
+    """Income = receipts (minus discount) + legacy payments.
+    Expenses = salaries actually PAID + other expenses. Net = difference."""
+
+    def setUp(self):
+        klass = Class.objects.create(class_name="Class 6", academic_year=2026)
+        self.student = Student.objects.create(
+            student_code="PiC6B0001", class_obj=klass, full_name="Test Student"
+        )
+        self.teacher = Faculty.objects.create(full_name="Test Teacher")
+        self.today = date.today()
+
+    def _receipt(self, total, discount, when=None, number=None):
+        return StudentPaymentReceipt.objects.create(
+            student=self.student, payment_date=when or self.today,
+            items=[], total_amount=total, total_discount=discount,
+            receipt_number=number,
+        )
+
+    def test_income_subtracts_receipt_discount(self):
+        self._receipt(3000, 500, number="PAY-T-1")
+        self.assertEqual(_finance_summary()["income"], 2500)
+
+    def test_legacy_payments_count_as_income(self):
+        StudentPayment.objects.create(
+            student=self.student, payment_type="Monthly Fee",
+            amount=1000, payment_date=self.today,
+        )
+        self._receipt(2000, 0, number="PAY-T-2")
+        self.assertEqual(_finance_summary()["income"], 3000)
+
+    def test_only_paid_salary_counts_as_expense(self):
+        TeacherSalary.objects.create(
+            teacher=self.teacher, salary_month=self.today.replace(day=1),
+            amount=6000, net_salary=6000, paid_amount=4000, due_amount=2000,
+            payment_date=self.today,
+        )
+        summary = _finance_summary()
+        self.assertEqual(summary["salaries_paid"], 4000)
+
+    def test_unpaid_salary_is_not_an_expense(self):
+        TeacherSalary.objects.create(
+            teacher=self.teacher, salary_month=self.today.replace(day=1),
+            amount=6000, net_salary=6000, paid_amount=0, due_amount=6000,
+        )
+        self.assertEqual(_finance_summary()["salaries_paid"], 0)
+
+    def test_net_is_income_minus_all_expenses(self):
+        self._receipt(10000, 1000, number="PAY-T-3")  # income 9000
+        TeacherSalary.objects.create(
+            teacher=self.teacher, salary_month=self.today.replace(day=1),
+            amount=3000, net_salary=3000, paid_amount=3000, due_amount=0,
+            payment_date=self.today,
+        )
+        Expense.objects.create(
+            title="Rent", category="Rent", amount=2000, expense_date=self.today,
+        )
+        summary = _finance_summary()
+        self.assertEqual(summary["income"], 9000)
+        self.assertEqual(summary["expenses"], 5000)
+        self.assertEqual(summary["net"], 4000)
+
+    def test_net_can_go_negative(self):
+        Expense.objects.create(
+            title="Repairs", category="Maintenance", amount=500, expense_date=self.today,
+        )
+        self.assertEqual(_finance_summary()["net"], -500)
+
+    def test_date_range_excludes_other_months(self):
+        old = self.today - timedelta(days=90)
+        self._receipt(5000, 0, when=old, number="PAY-T-4")
+        Expense.objects.create(title="Old", category="Other", amount=700, expense_date=old)
+        window = _finance_summary(self.today - timedelta(days=30), self.today)
+        self.assertEqual(window["income"], 0)
+        self.assertEqual(window["expenses"], 0)
+
+
+class ExpenseAdminTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.admin_user = get_user_model().objects.create_superuser(
+            "boss", "boss@example.com", "pw12345!"
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_add_expense_through_admin(self):
+        response = self.client.post(reverse("admin:core_expense_add"), {
+            "title": "Markers", "category": "Supplies", "amount": "250",
+            "expense_date": date.today().isoformat(), "payment_method": "Cash",
+            "remarks": "",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Expense.objects.get().amount, 250)
+
+    def test_list_and_delete(self):
+        expense = Expense.objects.create(
+            title="Tea", category="Events", amount=90, expense_date=date.today(),
+        )
+        self.assertEqual(self.client.get(reverse("admin:core_expense_changelist")).status_code, 200)
+        self.client.post(reverse("admin:core_expense_delete", args=[expense.pk]))
+        self.assertFalse(Expense.objects.exists())
+
+    def test_dashboard_shows_income_expenses_and_net(self):
+        Expense.objects.create(
+            title="Rent", category="Rent", amount=800, expense_date=date.today(),
+        )
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        finance = response.context["dashboard_finance"]
+        self.assertEqual(finance["month"]["expenses"], 800)
+        self.assertEqual(finance["month"]["net"], -800)
+        self.assertContains(response, "Net revenue")

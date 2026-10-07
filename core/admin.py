@@ -17,7 +17,7 @@ from django.utils.http import urlencode
 from django.db.models import Count, Q, Sum
 from .forms import (
     AchievementForm, AdmissionInfoForm, AdmissionInquiryAdminForm, BatchForm, ClassForm,
-    ClassScheduleForm, ContactMessageAdminForm, ExamForm, ExamResultForm, FacultyForm,
+    ClassScheduleForm, ContactMessageAdminForm, ExamForm, ExamResultForm, ExpenseForm, FacultyForm,
     GalleryForm, GallerySectionForm, GallerySubsectionForm, NoticeForm, StudentForm,
     StudentPaymentForm, StudentPaymentReceiptForm, SubjectForm, TeacherSalaryForm,
 )
@@ -37,6 +37,7 @@ from .models import (
     FacultyAttendance,
     Exam,
     ExamResult,
+    Expense,
     StudentPayment,
     StudentPaymentReceipt,
     TeacherSalary,
@@ -3993,6 +3994,174 @@ class ContactMessageAdmin(admin.ModelAdmin):
 
 
 # ---------------------------------------------------------
+# Finance summary + Other Expenses
+# ---------------------------------------------------------
+
+def _finance_summary(start=None, end=None):
+    """
+    Income, expenses, and net for an inclusive date range (either end may
+    be None for "no limit").
+
+    Income   = student receipts (total minus the receipt's discount)
+               + legacy StudentPayment rows kept for history.
+    Expenses = teacher salary actually PAID (paid_amount, not net_salary —
+               money owed but not yet paid isn't spent yet)
+               + everything recorded under Other Expenses.
+    Net      = income - expenses.
+
+    A salary counts on its payment_date; if that was never filled in, it
+    falls back to the salary month so paid records aren't silently lost.
+    """
+    receipts = StudentPaymentReceipt.objects.all()
+    legacy = StudentPayment.objects.all()
+    other = Expense.objects.all()
+
+    paid_dated = Q(payment_date__isnull=False)
+    paid_undated = Q(payment_date__isnull=True)
+    if start:
+        receipts = receipts.filter(payment_date__gte=start)
+        legacy = legacy.filter(payment_date__gte=start)
+        other = other.filter(expense_date__gte=start)
+        paid_dated &= Q(payment_date__gte=start)
+        paid_undated &= Q(salary_month__gte=start)
+    if end:
+        receipts = receipts.filter(payment_date__lte=end)
+        legacy = legacy.filter(payment_date__lte=end)
+        other = other.filter(expense_date__lte=end)
+        paid_dated &= Q(payment_date__lte=end)
+        paid_undated &= Q(salary_month__lte=end)
+    salaries = TeacherSalary.objects.filter(paid_amount__gt=0).filter(paid_dated | paid_undated)
+
+    receipt_totals = receipts.aggregate(gross=Sum("total_amount"), discount=Sum("total_discount"))
+    income_receipts = (receipt_totals["gross"] or Decimal("0")) - (receipt_totals["discount"] or Decimal("0"))
+    income_legacy = legacy.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    salaries_paid = salaries.aggregate(total=Sum("paid_amount"))["total"] or Decimal("0")
+    other_expenses = other.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    income = income_receipts + income_legacy
+    expenses = salaries_paid + other_expenses
+    return {
+        "income": income,
+        "salaries_paid": salaries_paid,
+        "other_expenses": other_expenses,
+        "expenses": expenses,
+        "net": income - expenses,
+    }
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    """Everything the academy spends besides teacher salaries (rent,
+    utilities, supplies...). Feeds the Expenses and Net Revenue figures
+    on the dashboard."""
+
+    search_fields = ("title", "remarks")
+
+    def _filtered_expenses(self, request):
+        expenses = Expense.objects.all().order_by("-expense_date", "-id")
+
+        query = request.GET.get("q", "").strip()
+        if query:
+            expenses = expenses.filter(Q(title__icontains=query) | Q(remarks__icontains=query))
+
+        active_category = request.GET.get("category", "").strip()
+        if active_category:
+            expenses = expenses.filter(category=active_category)
+
+        month_param = request.GET.get("month", "").strip()
+        if month_param:
+            try:
+                month_date = datetime.strptime(month_param, "%Y-%m").date()
+                expenses = expenses.filter(
+                    expense_date__year=month_date.year, expense_date__month=month_date.month
+                )
+            except ValueError:
+                month_param = ""
+
+        return expenses, query, active_category, month_param
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        expenses, query, active_category, month_param = self._filtered_expenses(request)
+
+        today = timezone.localdate()
+        month_total = Expense.objects.filter(
+            expense_date__year=today.year, expense_date__month=today.month
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
+        paginator = Paginator(expenses, 15)
+        page_obj = paginator.get_page(request.GET.get("page"))
+
+        preserved_params = request.GET.copy()
+        preserved_params.pop("page", None)
+
+        context = dict(
+            self.admin_site.each_context(request),
+            expenses=page_obj,
+            page_obj=page_obj,
+            page_range=_pagination_range(page_obj.number, paginator.num_pages),
+            preserved_querystring=preserved_params.urlencode(),
+            cards={
+                "count": expenses.count(),
+                "filtered_total": expenses.aggregate(total=Sum("amount"))["total"] or 0,
+                "this_month_total": month_total,
+            },
+            category_choices=Expense.CATEGORIES,
+            active_category=active_category,
+            search_query=query,
+            month_param=month_param,
+            active_section="finance",
+            active_page="expense_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/expense/list.html", context)
+
+    def add_view(self, request, form_url="", extra_context=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        return self._expense_form_view(request, instance=None)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(Expense, pk=object_id)
+        return self._expense_form_view(request, instance=instance)
+
+    def _expense_form_view(self, request, instance):
+        if request.method == "POST":
+            form = ExpenseForm(request.POST, instance=instance)
+            if form.is_valid():
+                form.save()
+                self.message_user(
+                    request,
+                    f"Expense {'updated' if instance else 'added'} successfully.",
+                    level=messages.SUCCESS,
+                )
+                return redirect("admin:core_expense_changelist")
+        else:
+            form = ExpenseForm(instance=instance)
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            instance=instance,
+            active_section="finance",
+            active_page="expense_edit" if instance else "expense_add",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/expense/form.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(Expense, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Expense deleted.", level=messages.SUCCESS)
+        return redirect("admin:core_expense_changelist")
+
+
+# ---------------------------------------------------------
 # Dashboard — inject live stats + a full categorized management
 # grid into the admin homepage context
 # ---------------------------------------------------------
@@ -4024,6 +4193,7 @@ _DASHBOARD_LAYOUT = [
     ("Finance", [
         ("Student Payments", "core_studentpayment", lambda: StudentPayment.objects.count()),
         ("Teacher Salaries", "core_teachersalary", lambda: TeacherSalary.objects.count()),
+        ("Other Expenses", "core_expense", lambda: Expense.objects.count()),
     ]),
     ("Website Content", [
         ("Achievements", "core_achievement", lambda: Achievement.objects.count()),
@@ -4091,9 +4261,10 @@ def _each_context_with_dashboard(request):
     month_start = today.replace(day=1)
 
     todays_attendance = Attendance.objects.filter(attendance_date=today)
-    monthly_revenue = StudentPayment.objects.filter(
-        payment_date__gte=month_start, payment_date__lte=today
-    ).aggregate(total=Sum("amount"))["total"] or 0
+    month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    month_finance = _finance_summary(month_start, month_end)
+    all_time_finance = _finance_summary()
+    monthly_revenue = month_finance["income"]
 
     context["dashboard_stats"] = {
         "active_students": Student.objects.filter(status="Active").count(),
@@ -4104,6 +4275,11 @@ def _each_context_with_dashboard(request):
         "today_total": todays_attendance.count(),
         "monthly_revenue": monthly_revenue,
         "pending_salaries": TeacherSalary.objects.filter(status="Pending").count(),
+    }
+    context["dashboard_finance"] = {
+        "month_label": month_start.strftime("%B %Y"),
+        "month": month_finance,
+        "all_time": all_time_finance,
     }
     context["dashboard_sections"] = _build_dashboard_sections()
 

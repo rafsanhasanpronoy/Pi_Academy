@@ -34,6 +34,34 @@
   .stat-card.alert .stat-value { color: var(--danger); }
   .stat-note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
 
+  .finance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .stat-card.income .stat-value { color: #166534; }
+  .stat-card.expense .stat-value { color: #9A3412; }
+  .stat-card.net-positive { border-color: #86EFAC; background: #F0FDF4; }
+  .stat-card.net-positive .stat-value { color: #166534; }
+  .stat-card.net-negative { border-color: var(--danger-soft-border); background: var(--danger-soft); }
+  .stat-card.net-negative .stat-value { color: var(--danger); }
+  .finance-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .finance-header .section-heading { margin: 0; }
+  .finance-alltime {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin: 0 0 34px;
+  }
+  .finance-alltime strong { color: var(--text); }
+
   .section-heading {
     font-size: 1.1rem;
     font-weight: 700;
@@ -128,10 +156,6 @@
     <p class="stat-value">{{ dashboard_stats.today_present }} / {{ dashboard_stats.today_total }}</p>
     <p class="stat-note">Students marked present so far</p>
   </div> -->
-  <div class="stat-card">
-    <p class="stat-label">Revenue this month</p>
-    <p class="stat-value">৳{{ dashboard_stats.monthly_revenue }}</p>
-  </div>
   <div class="stat-card {% if dashboard_stats.pending_inquiries %}alert{% endif %}">
     <p class="stat-label">New admission inquiries</p>
     <p class="stat-value">{{ dashboard_stats.pending_inquiries }}</p>
@@ -145,6 +169,36 @@
     <p class="stat-value">{{ dashboard_stats.pending_salaries }}</p>
   </div>
 </div>
+
+<div class="finance-header">
+  <p class="section-heading">Finance — {{ dashboard_finance.month_label }}</p>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <a href="{% url 'admin:core_expense_add' %}" class="btn btn-accent btn-sm">+ Add expense</a>
+    <a href="{% url 'admin:core_expense_changelist' %}" class="btn btn-ghost btn-sm">View expenses</a>
+  </div>
+</div>
+<div class="finance-grid">
+  <div class="stat-card income">
+    <p class="stat-label">Income</p>
+    <p class="stat-value">৳{{ dashboard_finance.month.income|floatformat:0 }}</p>
+    <p class="stat-note">Student fees collected, after discounts</p>
+  </div>
+  <div class="stat-card expense">
+    <p class="stat-label">Expenses</p>
+    <p class="stat-value">৳{{ dashboard_finance.month.expenses|floatformat:0 }}</p>
+    <p class="stat-note">Salaries ৳{{ dashboard_finance.month.salaries_paid|floatformat:0 }} + other ৳{{ dashboard_finance.month.other_expenses|floatformat:0 }}</p>
+  </div>
+  <div class="stat-card {% if dashboard_finance.month.net < 0 %}net-negative{% else %}net-positive{% endif %}">
+    <p class="stat-label">Net revenue</p>
+    <p class="stat-value">{% if dashboard_finance.month.net < 0 %}−{% endif %}৳{{ dashboard_finance.month.net|floatformat:0|cut:"-" }}</p>
+    <p class="stat-note">{% if dashboard_finance.month.net < 0 %}Spent more than collected{% else %}Income minus expenses{% endif %}</p>
+  </div>
+</div>
+<p class="finance-alltime">
+  All time: income <strong>৳{{ dashboard_finance.all_time.income|floatformat:0 }}</strong>
+  · expenses <strong>৳{{ dashboard_finance.all_time.expenses|floatformat:0 }}</strong>
+  · net <strong>{% if dashboard_finance.all_time.net < 0 %}−{% endif %}৳{{ dashboard_finance.all_time.net|floatformat:0|cut:"-" }}</strong>
+</p>
 
 <p class="section-heading">Manage</p>
 <div class="section-grid">
