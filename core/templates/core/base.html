@@ -298,18 +298,18 @@
     </a>
     <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
       <a href="{% url 'home' %}" class="nav-link transition-colors">Home</a>
-      <a href="{% url 'about' %}" class="nav-link transition-colors">About</a>
       <a href="{% url 'classes' %}" class="nav-link transition-colors">Classes</a>
       <a href="{% url 'faculty' %}" class="nav-link transition-colors">Faculty</a>
       <a href="{% url 'admission' %}" class="nav-link transition-colors">Admission</a>
       <a href="{% url 'results' %}" class="nav-link transition-colors">Results</a>
+      <a href="{% url 'notices' %}" class="nav-link transition-colors">Notices</a>
+      <a href="{% url 'about' %}" class="nav-link transition-colors">About</a>
       <div class="relative group">
         <button class="nav-link transition-colors flex items-center gap-1">
           More <span class="text-xs transition-transform duration-200 group-hover:rotate-180 inline-block">&#9662;</span>
         </button>
         <div class="absolute right-0 top-full pt-3 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200">
           <div class="bg-white border border-hair shadow-xl w-48 py-2 rounded-2xl overflow-hidden">
-            <a href="{% url 'notices' %}" class="block px-4 py-2.5 hover:bg-brand/5 hover:text-brand transition-colors">Notices</a>
             <a href="{% url 'achievements' %}" class="block px-4 py-2.5 hover:bg-brand/5 hover:text-brand transition-colors">Achievements</a>
             <a href="{% url 'gallery' %}" class="block px-4 py-2.5 hover:bg-brand/5 hover:text-brand transition-colors">Gallery</a>
             <a href="{% url 'contact' %}" class="block px-4 py-2.5 hover:bg-brand/5 hover:text-brand transition-colors">Contact</a>
@@ -337,8 +337,8 @@
       <a href="{% url 'faculty' %}">Faculty</a>
       <a href="{% url 'admission' %}">Admission</a>
       <a href="{% url 'results' %}">Results</a>
-      <a href="{% url 'about' %}">About</a>
       <a href="{% url 'notices' %}">Notices</a>
+      <a href="{% url 'about' %}">About</a>
       <a href="{% url 'achievements' %}">Achievements</a>
       <a href="{% url 'gallery' %}">Gallery</a>
       <a href="{% url 'contact' %}">Contact</a>

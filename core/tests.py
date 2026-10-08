@@ -1181,3 +1181,37 @@ class StudentResultsDisplayTests(TestCase):
         self.assertEqual([c.value for c in workbook["Results"][1]][:2], ["Student ID", "Full Name"])
         result = ExamResultAdmin(ExamResult, admin.site)._process_bulk_upload(BytesIO(response.content), self.exam)
         self.assertEqual(result["errors"], [])
+
+
+class NavbarOrderTests(TestCase):
+    """Notices sits in the main navbar, immediately before About, on both
+    the desktop and the mobile menu."""
+
+    def _menus(self):
+        html = self.client.get(reverse("home")).content.decode()
+        desktop = html[html.index('<nav class="hidden md:flex'):html.index('<a href="/admin/" class="hidden md:inline-flex')]
+        mobile = html[html.index('<nav id="mobileMenu"'):html.index("</header>")]
+        return desktop, mobile
+
+    def _order(self, menu):
+        import re
+        return [re.sub(r"<[^>]+>", "", m).strip() for m in re.findall(r"<a [^>]*>.*?</a>", menu, re.S)
+                if "/admin/" not in m]
+
+    def test_desktop_order(self):
+        desktop, _ = self._menus()
+        main_bar = desktop[:desktop.index("More")]  # everything before the dropdown
+        self.assertEqual(self._order(main_bar),
+                         ["Home", "Classes", "Faculty", "Admission", "Results", "Notices", "About"])
+
+    def test_notices_is_no_longer_inside_the_more_dropdown(self):
+        desktop, _ = self._menus()
+        self.assertEqual(self._order(desktop[desktop.index("More"):]),
+                         ["Achievements", "Gallery", "Contact"])
+
+    def test_mobile_order(self):
+        _, mobile = self._menus()
+        self.assertEqual(self._order(mobile), [
+            "Home", "Classes", "Faculty", "Admission", "Results",
+            "Notices", "About", "Achievements", "Gallery", "Contact",
+        ])
