@@ -15,6 +15,19 @@
   </div>
 </div>
 
+{% if source_application %}
+<div class="panel" style="padding:16px 20px; margin-bottom:20px; border-left:4px solid var(--accent);">
+  <p style="font-weight:700; margin:0 0 6px;">Admitting from application {{ source_application.reference_code }}</p>
+  <p style="margin:0; font-size:0.88rem; color:var(--muted); line-height:1.6;">
+    Course applied for: <strong style="color:var(--text);">{{ source_application.course_title|default:"—" }}</strong>
+    {% if source_application.preferred_batch %}· Preferred batch: <strong style="color:var(--text);">{{ source_application.preferred_batch }}</strong>{% endif %}<br>
+    Guardian: <strong style="color:var(--text);">{{ source_application.guardian_name }}</strong>
+    ({{ source_application.guardian_relation }}) · <a href="tel:{{ source_application.guardian_phone }}">{{ source_application.guardian_phone }}</a><br>
+    Confirm the guardian has been verified, choose the class and batch, then save. Saving marks the application Admitted.
+  </p>
+</div>
+{% endif %}
+
 {% if instance %}
 <div style="margin-bottom:20px;">
   <span class="code-badge">
@@ -36,6 +49,7 @@
 <div class="panel form-card form-card-wide">
   <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
+    {% if source_application %}<input type="hidden" name="application" value="{{ source_application.pk }}">{% endif %}
     <div class="form-grid">
 
       <p class="form-section-label">Class &amp; batch</p>
