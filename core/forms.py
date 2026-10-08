@@ -5,10 +5,12 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from .results import grade_for
 from .models import (
-    Achievement, AdmissionInfo, AdmissionInquiry, Batch, Class, ClassSchedule,
+    Achievement, AdmissionApplication, AdmissionInfo, AdmissionInquiry, Batch, Class, ClassSchedule,
     ContactMessage, Exam, ExamResult, Expense, Faculty, Gallery, GallerySection, GallerySubsection,
     Notice, Student, StudentPayment, StudentPaymentReceipt, Subject, TeacherSalary,
+    BLOOD_GROUP_CHOICES,
 )
 
 INPUT_CLASSES = (
@@ -660,7 +662,7 @@ class ExamForm(TailwindStyledFormMixin, forms.ModelForm):
 
     class Meta:
         model = Exam
-        fields = ["class_obj", "exam_name", "exam_date"]
+        fields = ["class_obj", "exam_name", "exam_date", "full_marks"]
         widgets = {
             "exam_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
@@ -668,6 +670,12 @@ class ExamForm(TailwindStyledFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["exam_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["full_marks"].label = "Full marks (per subject)"
+        self.fields["full_marks"].help_text = (
+            "What each subject is marked out of, e.g. 100. Grades are worked "
+            "out from this."
+        )
+        self.fields["full_marks"].widget.attrs.update({"min": "1", "max": "999", "step": "any"})
         self.fields["class_obj"].label = "Class"
         self.fields["class_obj"].empty_label = "Select a class"
         self._style_fields()
@@ -686,6 +694,10 @@ class ExamResultForm(TailwindStyledFormMixin, forms.ModelForm):
         self.fields["student"].empty_label = "Select a student"
         self.fields["subject"].empty_label = "Select a subject"
         self.fields["grade"].required = False
+        self.fields["grade"].label = "Grade (optional)"
+        self.fields["grade"].help_text = (
+            "Leave blank and it's worked out automatically from the marks."
+        )
 
         # Arriving from a specific exam's "Add Result" link — the exam
         # (and therefore its class) is already known. Lock it as a hidden
@@ -725,6 +737,22 @@ class ExamResultForm(TailwindStyledFormMixin, forms.ModelForm):
             raise ValidationError(
                 f"{subject.subject_name} does not belong to {exam.class_obj.class_name}."
             )
+        marks = cleaned_data.get("marks")
+        if exam and marks is not None and marks > exam.full_marks:
+            self.add_error(
+                "marks",
+                f"Marks can't be more than the exam's full marks ({exam.full_marks:g}).",
+            )
+        elif exam and marks is not None:
+            # Grade: keep one typed in by hand, otherwise work it out. If
+            # the marks were edited but the grade box was left as it was,
+            # the old (auto) grade is stale, so recalculate that too.
+            grade = (cleaned_data.get("grade") or "").strip()
+            grade_untouched = "grade" not in self.changed_data
+            if not grade or (grade_untouched and "marks" in self.changed_data):
+                grade = grade_for(marks, exam.full_marks)[0]
+            cleaned_data["grade"] = grade
+
         if exam and student and subject:
             clash = ExamResult.objects.filter(exam=exam, student=student, subject=subject)
             if self.instance.pk:
@@ -1192,3 +1220,175 @@ class ExpenseForm(TailwindStyledFormMixin, forms.ModelForm):
         if spent_on and spent_on > timezone.localdate():
             raise ValidationError("Expense date can't be in the future.")
         return spent_on
+
+
+def _validate_phone(value, label="phone number"):
+    """Loose check — people type 01XXXXXXXXX, +8801XXXXXXXXX, with spaces
+    or dashes. Just make sure it's plausibly a phone number."""
+    digits = "".join(ch for ch in (value or "") if ch.isdigit())
+    allowed = set("0123456789+-() ")
+    if not set(value or "") <= allowed or not (10 <= len(digits) <= 15):
+        raise ValidationError(f"Please enter a valid {label} (e.g. 01700000000).")
+
+
+class AdmissionApplicationForm(TailwindStyledFormMixin, HoneypotMixin, forms.ModelForm):
+    """The public "Apply Now" form. Collects what staff need to start
+    verification — it never creates a Student."""
+
+    understand = forms.BooleanField(
+        required=True,
+        label=(
+            "I understand this is an application, not a confirmed admission. "
+            "A guardian must visit or speak with the academy so the admission "
+            "can be verified."
+        ),
+        error_messages={"required": "Please confirm you understand how admission works."},
+    )
+
+    class Meta:
+        model = AdmissionApplication
+        fields = [
+            "course", "preferred_batch",
+            "student_name", "date_of_birth", "gender", "institution_name",
+            "blood_group", "student_phone", "address",
+            "guardian_name", "guardian_relation", "guardian_phone",
+            "reference", "message",
+        ]
+        labels = {
+            "course": "Course you want to enrol in",
+            "preferred_batch": "Preferred batch / time (optional)",
+            "student_name": "Student's full name",
+            "date_of_birth": "Date of birth",
+            "gender": "Gender",
+            "institution_name": "School / College name",
+            "blood_group": "Blood group (optional)",
+            "student_phone": "Student's phone (optional)",
+            "address": "Address (optional)",
+            "guardian_name": "Guardian's full name",
+            "guardian_relation": "Relation to student",
+            "guardian_phone": "Guardian's phone",
+            "reference": "Reference (optional)",
+            "message": "Anything else you'd like us to know (optional)",
+        }
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "message": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["course"].queryset = AdmissionInfo.objects.filter(is_active=True).order_by("title")
+        self.fields["course"].required = True
+        self.fields["course"].empty_label = "Select a course"
+        self.fields["date_of_birth"].input_formats = ["%Y-%m-%d"]
+        self.fields["gender"].required = True
+        self.fields["gender"].choices = [("", "Select gender")] + AdmissionApplication.GENDER_CHOICES
+        self.fields["institution_name"].required = True
+        self.fields["institution_name"].widget.attrs["placeholder"] = "Where the student currently studies"
+        self.fields["blood_group"].required = False
+        self.fields["blood_group"].choices = [("", "Select blood group")] + list(BLOOD_GROUP_CHOICES)
+        self.fields["guardian_relation"].required = True
+        self.fields["guardian_relation"].choices = AdmissionApplication.GUARDIAN_RELATIONS
+        self.fields["preferred_batch"].widget.attrs["placeholder"] = "e.g. Morning, after school"
+        self.fields["reference"].widget.attrs["placeholder"] = "Who told you about us, if anyone"
+        for name in ("student_phone", "address", "preferred_batch", "reference", "message"):
+            self.fields[name].required = False
+        self._style_fields()
+
+    def clean_date_of_birth(self):
+        dob = self.cleaned_data.get("date_of_birth")
+        if dob:
+            today = timezone.localdate()
+            if dob > today:
+                raise ValidationError("Date of birth can't be in the future.")
+            if (today - dob).days / 365.25 > 100:
+                raise ValidationError("Please double-check this date — it's over 100 years ago.")
+        return dob
+
+    def clean_guardian_phone(self):
+        value = (self.cleaned_data.get("guardian_phone") or "").strip()
+        _validate_phone(value, "guardian phone number")
+        return value
+
+    def clean_student_phone(self):
+        value = (self.cleaned_data.get("student_phone") or "").strip()
+        if value:
+            _validate_phone(value, "phone number")
+        return value
+
+    def clean(self):
+        cleaned = super().clean()
+        # Double-clicks and repeat submissions: if this guardian already has
+        # a still-open application for the same student and course, don't
+        # create a second one — tell them we already have it.
+        name = (cleaned.get("student_name") or "").strip()
+        phone = cleaned.get("guardian_phone")
+        course = cleaned.get("course")
+        if name and phone and course:
+            already = AdmissionApplication.objects.filter(
+                student_name__iexact=name, guardian_phone=phone, course=course,
+                status__in=["Pending", "Contacted", "Verified"],
+            ).exists()
+            if already:
+                raise ValidationError(
+                    f"We already have an open application for {name} in {course.title} "
+                    f"from this phone number. Our team will be in touch — no need to apply again."
+                )
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.status = "Pending"  # the public can never set this
+        instance.course_title = instance.course.title if instance.course_id else None
+        if commit:
+            instance.save()
+        return instance
+
+
+class AdmissionApplicationAdminForm(TailwindStyledFormMixin, forms.ModelForm):
+    """Staff-side edit form for applications (correct details, set the
+    status, keep private notes). Separate from the public form: no
+    honeypot, no acknowledgement checkbox, and it exposes status/notes."""
+
+    class Meta:
+        model = AdmissionApplication
+        fields = [
+            "status", "staff_notes",
+            "course", "preferred_batch",
+            "student_name", "date_of_birth", "gender", "institution_name",
+            "blood_group", "student_phone", "address",
+            "guardian_name", "guardian_relation", "guardian_phone",
+            "reference", "message",
+        ]
+        labels = {
+            "course": "Course",
+            "staff_notes": "Staff notes (private)",
+            "guardian_relation": "Guardian's relation",
+        }
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "message": forms.Textarea(attrs={"rows": 3}),
+            "staff_notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["date_of_birth"].input_formats = ["%Y-%m-%d"]
+        self.fields["course"].required = False
+        self.fields["course"].empty_label = "No course selected"
+        for name in ("gender", "institution_name", "blood_group", "student_phone", "address",
+                     "preferred_batch", "reference", "message", "staff_notes"):
+            self.fields[name].required = False
+        self.fields["gender"].choices = [("", "—")] + AdmissionApplication.GENDER_CHOICES
+        self.fields["blood_group"].choices = [("", "—")] + list(BLOOD_GROUP_CHOICES)
+        self._style_fields()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if instance.course_id:
+            instance.course_title = instance.course.title
+        if commit:
+            instance.save()
+        return instance

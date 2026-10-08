@@ -220,6 +220,10 @@ DEFAULT_RATE_PER_CLASS = env.int("DEFAULT_RATE_PER_CLASS", default=300)
 # on that bucket means re-uploading to the same path just replaces it.
 ACADEMY_LOGO_URL = env("ACADEMY_LOGO_URL", default="")
 
+# Phone number shown to guardians after they apply ("call us to verify your
+# admission"). Leave empty to show only the address and office hours.
+ACADEMY_CONTACT_PHONE = env("ACADEMY_CONTACT_PHONE", default="")
+
 # Same idea as ACADEMY_LOGO_URL, for the 3 program banners on the
 # homepage slider (Math / Science / Kids Academy) — upload each PNG to
 # Supabase, put its public URL in the matching env var.

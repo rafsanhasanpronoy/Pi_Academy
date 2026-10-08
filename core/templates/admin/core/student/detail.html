@@ -27,6 +27,10 @@
     .detail-grid { grid-template-columns: 1fr; }
     .detail-row:nth-child(2) { border-top: 1px solid var(--border); }
   }
+  .pill.pill-pass { background: #DCFCE7; color: #166534; border-color: #BBF7D0; }
+  .pill.pill-fail { background: #FEE2E2; color: #991B1B; border-color: #FECACA; }
+  .result-pass { color: #166534; }
+  .result-fail { color: #991B1B; font-weight: 700; }
 </style>
 {% endblock %}
 
@@ -158,6 +162,56 @@
     </div>
   </div>
 </div>
+
+<p class="section-heading" style="font-size:1.1rem; font-weight:700; margin:28px 0 14px;">Exam results</p>
+{% if exam_reports %}
+{% for report in exam_reports %}
+<div class="panel" style="margin-bottom:18px;">
+  <div style="padding:16px 22px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div>
+      <a href="{% url 'admin:core_exam_view' report.exam.pk %}" style="font-weight:700; font-size:1rem; color:var(--text); text-decoration:none;">{{ report.exam.exam_name }}</a>
+      <div style="font-size:0.82rem; color:var(--muted); margin-top:2px;">{{ report.exam.exam_date|date:"d M Y" }} &middot; out of {{ report.exam.full_marks|floatformat:"-2" }} per subject</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <span class="pill">Total {{ report.total|floatformat:"-2" }} / {{ report.full_total|floatformat:"-2" }}</span>
+      <span class="pill">{{ report.percentage|floatformat:"-2" }}%</span>
+      <span class="pill">GPA {{ report.gpa }}</span>
+      <span class="pill {% if report.passed %}pill-pass{% else %}pill-fail{% endif %}">{% if report.passed %}Passed{% else %}Failed{% endif %}</span>
+    </div>
+  </div>
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Subject</th>
+        <th>Marks</th>
+        <th>Out of</th>
+        <th>Grade</th>
+        <th>Result</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report.rows %}
+      <tr>
+        <td>{{ row.subject }}</td>
+        <td style="font-weight:700;">{{ row.marks|floatformat:"-2" }}</td>
+        <td style="color:var(--muted);">{{ row.full_marks|floatformat:"-2" }}</td>
+        <td><span class="pill">{{ row.grade }}</span></td>
+        <td class="{% if row.passed %}result-pass{% else %}result-fail{% endif %}">{% if row.passed %}Pass{% else %}Fail{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% else %}
+<div class="panel" style="margin-bottom:0;">
+  <div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <p>No exam results recorded for this student yet.</p>
+    <a href="{% url 'admin:core_exam_changelist' %}" class="btn btn-ghost btn-sm" style="margin-top:10px;">Go to Exams</a>
+  </div>
+</div>
+{% endif %}
 
 <p class="section-heading" style="font-size:1.1rem; font-weight:700; margin:28px 0 14px;">Payments</p>
 <div class="panel" style="margin-bottom:0;">

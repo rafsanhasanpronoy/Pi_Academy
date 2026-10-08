@@ -384,6 +384,10 @@
     </a>
 
     <p class="nav-section-label">Inbox</p>
+    <a href="{% url 'admin:core_admissionapplication_changelist' %}" class="nav-link {% if active_page == 'admissionapplication_list' or active_page == 'admissionapplication_view' or active_page == 'admissionapplication_add' or active_page == 'admissionapplication_edit' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+      Admission Applications
+    </a>
     <a href="/admin/core/admissioninquiry/" class="nav-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4z"/><path d="M4 4l8 8 8-8"/></svg>
       Admission Inquiries

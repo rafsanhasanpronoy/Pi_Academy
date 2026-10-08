@@ -86,28 +86,32 @@
   </div>
   {% endif %}
 
-  {% if exams %}
+  {% if exam_reports %}
   <div>
     <h3 class="text-lg font-bold mb-5 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Exam Results</h3>
     <div class="space-y-6">
-      {% for exam, results in exams.items %}
+      {% for report in exam_reports %}
       <div class="border border-hair overflow-hidden">
         <div class="px-6 py-4 border-b border-hair bg-ink text-white flex items-center justify-between">
-          <p class="font-bold">{{ exam.exam_name }}</p>
-          <p class="text-xs text-white/60 font-mono">{{ exam.exam_date|date:"d M Y" }}</p>
+          <p class="font-bold">{{ report.exam.exam_name }}</p>
+          <p class="text-xs text-white/60 font-mono">{{ report.exam.exam_date|date:"d M Y" }}</p>
         </div>
         <div class="divide-y divide-hair">
-          {% for result in results %}
+          {% for row in report.rows %}
           <div class="px-6 py-3 flex items-center justify-between text-sm transition-colors duration-200 hover:bg-brand/5">
-            <span>{{ result.subject.subject_name }}</span>
+            <span>{{ row.subject }}</span>
             <span class="flex items-center gap-4">
-              <span class="font-semibold font-mono">{{ result.marks }}</span>
-              {% if result.grade %}
-              <span class="text-brand font-bold font-mono">{{ result.grade }}</span>
-              {% endif %}
+              <span class="font-semibold font-mono">{{ row.marks|floatformat:"-2" }}<span class="text-muted font-normal"> / {{ row.full_marks|floatformat:"-2" }}</span></span>
+              <span class="text-brand font-bold font-mono w-8 text-right">{{ row.grade }}</span>
             </span>
           </div>
           {% endfor %}
+        </div>
+        <div class="px-6 py-4 border-t border-hair bg-surface grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div><p class="eyebrow mb-1">Total</p><p class="font-bold font-mono">{{ report.total|floatformat:"-2" }} / {{ report.full_total|floatformat:"-2" }}</p></div>
+          <div><p class="eyebrow mb-1">Percentage</p><p class="font-bold font-mono">{{ report.percentage|floatformat:"-2" }}%</p></div>
+          <div><p class="eyebrow mb-1">GPA</p><p class="font-bold font-mono">{{ report.gpa }} <span class="text-brand">{{ report.overall_grade }}</span></p></div>
+          <div><p class="eyebrow mb-1">Result</p><p class="font-bold {% if report.passed %}text-brand{% endif %}">{% if report.passed %}Passed{% else %}Failed{% endif %}</p></div>
         </div>
       </div>
       {% endfor %}

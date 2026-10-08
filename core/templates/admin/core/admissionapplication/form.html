@@ -1,0 +1,36 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{% if instance %}Edit Application{% else %}Add Application{% endif %} — Dashboard{% endblock %}
+{% block crumb %}{% if instance %}Edit application{% else %}Add walk-in application{% endif %}{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_admissionapplication_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Applications
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if instance %}Edit application{% else %}Add walk-in application{% endif %}</h1>
+    <p class="page-sub">{% if instance %}{{ instance.reference_code }} · {{ instance.student_name }}{% else %}Record an application taken in person or over the phone{% endif %}</p>
+  </div>
+</div>
+
+<div class="panel form-card">
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-field">
+      <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+      {{ field }}
+      {% if field.help_text %}<p class="form-help">{{ field.help_text }}</p>{% endif %}
+      {% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+    </div>
+    {% endfor %}
+    {% for error in form.non_field_errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">{% if instance %}Save changes{% else %}Add application{% endif %}</button>
+      <a href="{% url 'admin:core_admissionapplication_changelist' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

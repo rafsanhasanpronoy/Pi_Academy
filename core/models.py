@@ -6,7 +6,7 @@
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
 import django
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 # CompositePrimaryKey was added in Django 5.2. If you're on an older
@@ -14,6 +14,13 @@ from django.db import models
 # so we detect the version instead of assuming it's available.
 DJANGO_VERSION = django.VERSION[:2]
 _HAS_COMPOSITE_PK = DJANGO_VERSION >= (5, 2)
+
+BLOOD_GROUP_CHOICES = [
+    ("A+", "A+"), ("A-", "A-"),
+    ("B+", "B+"), ("B-", "B-"),
+    ("AB+", "AB+"), ("AB-", "AB-"),
+    ("O+", "O+"), ("O-", "O-"),
+]
 
 
 class Achievement(models.Model):
@@ -83,6 +90,79 @@ class AdmissionInquiry(models.Model):
 
     def __str__(self):
         return self.student_name
+
+
+class AdmissionApplication(models.Model):
+    """An "Apply Now" submission from the public site.
+
+    This is NOT an admission. It records who wants to enrol and in which
+    course, then waits for staff to verify it with the guardian (a visit
+    or a phone call). Only when staff admit the student does a Student
+    record get created — see StudentAdmin._student_form_view, which marks
+    the application Admitted and links it to the new student.
+
+    Separate from AdmissionInquiry, which is a lightweight "call me back"
+    question from the Admission page. Needs the table created by
+    sql/create_admission_applications_table.sql.
+    """
+
+    STATUS_CHOICES = [
+        ("Pending", "Pending verification"),
+        ("Contacted", "Guardian contacted"),
+        ("Verified", "Verified"),
+        ("Admitted", "Admitted"),
+        ("Rejected", "Rejected"),
+    ]
+    GUARDIAN_RELATIONS = [
+        ("Father", "Father"),
+        ("Mother", "Mother"),
+        ("Other", "Other guardian"),
+    ]
+    GENDER_CHOICES = [("Male", "Male"), ("Female", "Female"), ("Other", "Other")]
+
+    id = models.BigAutoField(primary_key=True)
+    course = models.ForeignKey(
+        'AdmissionInfo', models.DO_NOTHING, db_column='course_id', blank=True, null=True,
+        related_name='applications',
+    )
+    # Snapshot of the course name at the time of applying, so the record
+    # still makes sense if the course is renamed or removed later.
+    course_title = models.CharField(max_length=200, blank=True, null=True)
+    student_name = models.CharField(max_length=150)
+    date_of_birth = models.DateField()
+    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True)
+    student_phone = models.CharField(max_length=20, blank=True, null=True)
+    institution_name = models.CharField(max_length=200, blank=True, null=True)
+    blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    guardian_name = models.CharField(max_length=150)
+    guardian_relation = models.CharField(max_length=20, choices=GUARDIAN_RELATIONS, default="Father")
+    guardian_phone = models.CharField(max_length=20)
+    preferred_batch = models.CharField(max_length=150, blank=True, null=True)
+    reference = models.CharField(max_length=200, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Pending")
+    staff_notes = models.TextField(blank=True, null=True)
+    student = models.ForeignKey(
+        'Student', models.DO_NOTHING, db_column='student_id', blank=True, null=True,
+        related_name='applications',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'admission_applications'
+        verbose_name = 'Admission Application'
+        verbose_name_plural = 'Admission Applications'
+
+    def __str__(self):
+        return f"{self.student_name} — {self.course_title or 'no course'}"
+
+    @property
+    def reference_code(self):
+        """The number the guardian quotes when they call or visit."""
+        year = self.created_at.year if self.created_at else ""
+        return f"APP-{year}-{self.pk:05d}" if self.pk else ""
 
 
 class Attendance(models.Model):
@@ -235,12 +315,27 @@ class ExamResult(models.Model):
     def __str__(self):
         return f"{self.student} — {self.subject} ({self.marks})"
 
+    def save(self, *args, **kwargs):
+        # Safety net: a result is never stored without a grade. Forms and
+        # the bulk upload set it themselves; this covers anything else
+        # (scripts, the shell, other admin paths).
+        if not self.grade and self.marks is not None:
+            from .results import grade_for
+            self.grade = grade_for(self.marks, self.exam.full_marks)[0]
+        super().save(*args, **kwargs)
+
 
 class Exam(models.Model):
     id = models.BigAutoField(primary_key=True)
     class_obj = models.ForeignKey(Class, models.DO_NOTHING, db_column='class_id')
     exam_name = models.CharField(max_length=100)
     exam_date = models.DateField()
+    # What each subject is marked out of. Grades, percentages and GPA are
+    # all worked out against this. Needs sql/add_exam_full_marks.sql.
+    full_marks = models.DecimalField(
+        max_digits=6, decimal_places=2, default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(999)],
+    )
 
     class Meta:
         managed = False
@@ -475,12 +570,7 @@ class StudentPaymentReceipt(models.Model):
 
 
 class Student(models.Model):
-    BLOOD_GROUPS = [
-        ("A+", "A+"), ("A-", "A-"),
-        ("B+", "B+"), ("B-", "B-"),
-        ("AB+", "AB+"), ("AB-", "AB-"),
-        ("O+", "O+"), ("O-", "O-"),
-    ]
+    BLOOD_GROUPS = BLOOD_GROUP_CHOICES
 
     id = models.BigAutoField(primary_key=True)
     student_code = models.CharField(unique=True, max_length=30)

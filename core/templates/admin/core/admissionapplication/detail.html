@@ -1,0 +1,122 @@
+{% extends "admin/core/dashboard_base.html" %}
+{% block title %}{{ instance.reference_code }} — Dashboard{% endblock %}
+{% block crumb %}{{ instance.reference_code }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 32px; }
+  .detail-row { padding:13px 0; border-top:1px solid var(--border); }
+  .detail-row:first-child, .detail-row:nth-child(2) { border-top:none; }
+  .detail-label { font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); margin:0 0 4px; }
+  .detail-value { font-size:0.95rem; color:var(--text); margin:0; }
+  .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
+  .status-Pending { background:#FEF3C7; color:#92400E; }
+  .status-Contacted { background:#DBEAFE; color:#1E40AF; }
+  .status-Verified { background:#E0E7FF; color:#3730A3; }
+  .status-Admitted { background:#DCFCE7; color:#166534; }
+  .status-Rejected { background:#F3F4F6; color:#4B5563; }
+  @media (max-width: 640px) {
+    .detail-grid { grid-template-columns:1fr; }
+    .detail-row:nth-child(2) { border-top:1px solid var(--border); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin:core_admissionapplication_changelist' %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  Back to Applications
+</a>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ instance.student_name }}</h1>
+    <p class="page-sub">
+      {{ instance.reference_code }} · applied {{ instance.created_at|date:"d M Y, h:i A" }} ·
+      <span class="status-badge status-{{ instance.status }}">{{ instance.get_status_display }}</span>
+    </p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_admissionapplication_change' instance.pk %}" class="btn btn-ghost">Edit</a>
+    {% if instance.status == 'Admitted' and instance.student_id %}
+    <a href="{% url 'admin:core_student_view' instance.student_id %}" class="btn btn-accent">View student</a>
+    {% else %}
+    <a href="{% url 'admin:core_admissionapplication_start_admission' instance.pk %}" class="btn btn-accent">Start admission</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if instance.status != 'Admitted' %}
+<div class="panel" style="padding:18px 22px; margin-bottom:20px; border-left:4px solid var(--accent);">
+  <p style="margin:0 0 10px; font-weight:700;">Verify before admitting</p>
+  <p style="margin:0 0 14px; font-size:0.9rem; color:var(--muted); line-height:1.6;">
+    Call the guardian on <a href="tel:{{ instance.guardian_phone }}"><strong>{{ instance.guardian_phone }}</strong></a>
+    or meet them in person. Once confirmed, mark it Verified and choose <strong>Start admission</strong> —
+    it opens the student form pre-filled from this application.
+  </p>
+  <div class="row-actions">
+    {% for value, label in quick_statuses %}
+    <form method="post" action="{% url 'admin:core_admissionapplication_set_status' instance.pk %}" style="margin:0;">
+      {% csrf_token %}
+      <input type="hidden" name="status" value="{{ value }}">
+      <button type="submit" class="btn {% if value == 'Rejected' %}btn-danger{% else %}btn-ghost{% endif %} btn-sm">Mark {{ label }}</button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="panel form-card" style="margin-bottom:20px;">
+  <h2 style="font-size:1rem; margin:0 0 6px;">Course</h2>
+  <div class="detail-grid">
+    <div class="detail-row"><p class="detail-label">Course applied for</p><p class="detail-value">{{ instance.course_title|default:"—" }}</p></div>
+    <div class="detail-row"><p class="detail-label">Preferred batch / time</p><p class="detail-value">{{ instance.preferred_batch|default:"—" }}</p></div>
+  </div>
+</div>
+
+<div class="panel form-card" style="margin-bottom:20px;">
+  <h2 style="font-size:1rem; margin:0 0 6px;">Student</h2>
+  <div class="detail-grid">
+    <div class="detail-row"><p class="detail-label">Full name</p><p class="detail-value">{{ instance.student_name }}</p></div>
+    <div class="detail-row"><p class="detail-label">Date of birth</p><p class="detail-value">{{ instance.date_of_birth|date:"d M Y" }}</p></div>
+    <div class="detail-row"><p class="detail-label">Gender</p><p class="detail-value">{{ instance.gender|default:"—" }}</p></div>
+    <div class="detail-row"><p class="detail-label">School / College</p><p class="detail-value">{{ instance.institution_name|default:"—" }}</p></div>
+    <div class="detail-row"><p class="detail-label">Blood group</p><p class="detail-value">{{ instance.blood_group|default:"—" }}</p></div>
+    <div class="detail-row"><p class="detail-label">Student's phone</p><p class="detail-value">{{ instance.student_phone|default:"—" }}</p></div>
+    <div class="detail-row" style="grid-column:1 / -1;"><p class="detail-label">Address</p><p class="detail-value">{{ instance.address|default:"—" }}</p></div>
+  </div>
+</div>
+
+<div class="panel form-card" style="margin-bottom:20px;">
+  <h2 style="font-size:1rem; margin:0 0 6px;">Guardian</h2>
+  <div class="detail-grid">
+    <div class="detail-row"><p class="detail-label">Name</p><p class="detail-value">{{ instance.guardian_name }}</p></div>
+    <div class="detail-row"><p class="detail-label">Relation</p><p class="detail-value">{{ instance.guardian_relation }}</p></div>
+    <div class="detail-row"><p class="detail-label">Phone</p><p class="detail-value"><a href="tel:{{ instance.guardian_phone }}">{{ instance.guardian_phone }}</a></p></div>
+    <div class="detail-row"><p class="detail-label">Reference</p><p class="detail-value">{{ instance.reference|default:"—" }}</p></div>
+  </div>
+</div>
+
+{% if instance.message or instance.staff_notes %}
+<div class="panel form-card">
+  {% if instance.message %}
+  <h2 style="font-size:1rem; margin:0 0 6px;">Message from applicant</h2>
+  {% if instance.staff_notes %}
+  <p style="white-space:pre-line; margin:0 0 18px;">{{ instance.message }}</p>
+  {% else %}
+  <p style="white-space:pre-line; margin:0;">{{ instance.message }}</p>
+  {% endif %}
+  {% endif %}
+  {% if instance.staff_notes %}
+  <h2 style="font-size:1rem; margin:0 0 6px;">Staff notes</h2>
+  <p style="white-space:pre-line; margin:0;">{{ instance.staff_notes }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'admin:core_admissionapplication_delete' instance.pk %}"
+      onsubmit="return confirm('Delete this application? This cannot be undone.');" style="margin-top:24px;">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger btn-sm">Delete application</button>
+</form>
+{% endblock %}

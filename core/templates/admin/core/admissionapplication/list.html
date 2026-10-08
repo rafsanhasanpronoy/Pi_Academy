@@ -1,0 +1,129 @@
+{% extends "admin/core/dashboard_base.html" %}
+
+{% block title %}Admission Applications — Dashboard{% endblock %}
+{% block crumb %}Admission Applications{% endblock %}
+
+{% block extra_head %}
+<style>
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:22px; }
+  .stat-card { display:block; text-decoration:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 16px; }
+  .stat-card.current { border-color: var(--accent); }
+  .stat-label { font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin:0 0 4px; }
+  .stat-value { font-size:1.35rem; font-weight:700; color:var(--text); line-height:1.1; margin:0; }
+  .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.76rem; font-weight:700; }
+  .status-Pending { background:#FEF3C7; color:#92400E; }
+  .status-Contacted { background:#DBEAFE; color:#1E40AF; }
+  .status-Verified { background:#E0E7FF; color:#3730A3; }
+  .status-Admitted { background:#DCFCE7; color:#166534; }
+  .status-Rejected { background:#F3F4F6; color:#4B5563; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Admission Applications</h1>
+    <p class="page-sub">Submitted from the website's Apply Now form. Verify each one with the guardian before admitting.</p>
+  </div>
+  <div class="row-actions">
+    <a href="{% url 'admin:core_admissionapplication_add' %}" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+      Add walk-in
+    </a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  {% for card in status_cards %}
+  <a href="?status={{ card.value }}" class="stat-card {% if active_status == card.value %}current{% endif %}">
+    <p class="stat-label">{{ card.label }}</p>
+    <p class="stat-value">{{ card.count }}</p>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="panel" style="padding: 18px 22px; margin-bottom: 20px;">
+  <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+    <div style="flex:2; min-width:200px;">
+      <label class="form-label" for="id_q">Search</label>
+      <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Student, guardian, phone or course">
+    </div>
+    <div style="flex:1; min-width:170px;">
+      <label class="form-label" for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="">All statuses</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if active_status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="row-actions">
+      <button type="submit" class="btn btn-accent btn-sm">Filter</button>
+      <a href="{% url 'admin:core_admissionapplication_changelist' %}" class="btn btn-ghost btn-sm">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  {% if applications %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Application</th>
+        <th>Student</th>
+        <th>Course</th>
+        <th>Guardian</th>
+        <th>Status</th>
+        <th style="width:190px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for app in applications %}
+      <tr>
+        <td>
+          <span style="font-weight:600;">{{ app.reference_code }}</span><br>
+          <span style="color:var(--muted); font-size:0.82rem;">{{ app.created_at|date:"d M Y, h:i A" }}</span>
+        </td>
+        <td>{{ app.student_name }}</td>
+        <td>{{ app.course_title|default:"—" }}</td>
+        <td>
+          {{ app.guardian_name }}<br>
+          <a href="tel:{{ app.guardian_phone }}" style="font-size:0.85rem;">{{ app.guardian_phone }}</a>
+        </td>
+        <td><span class="status-badge status-{{ app.status }}">{{ app.get_status_display }}</span></td>
+        <td>
+          <div class="row-actions">
+            <a href="{% url 'admin:core_admissionapplication_view' app.pk %}" class="btn btn-accent btn-sm">Review</a>
+            <a href="{% url 'admin:core_admissionapplication_change' app.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+    <p>No applications yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="row-actions" style="justify-content:center; margin-top:22px;">
+  {% if page_obj.has_previous %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  {% for p in page_range %}
+    {% if p %}
+      <a class="btn {% if p == page_obj.number %}btn-accent{% else %}btn-ghost{% endif %} btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ p }}">{{ p }}</a>
+    {% else %}
+      <span style="padding:0 4px; color:var(--muted);">&hellip;</span>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+  <a class="btn btn-ghost btn-sm" href="?{% if preserved_querystring %}{{ preserved_querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

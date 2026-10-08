@@ -4,11 +4,17 @@
 {% block content %}
 <section data-reveal class="max-w-6xl mx-auto px-6 pt-16 pb-12">
   <p class="eyebrow mb-3">Admission</p>
-  <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Apply for Admission</h1>
+  <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Admission</h1>
   <p class="mt-5 text-lg text-muted max-w-2xl leading-relaxed">
-    Fill out the form below and our admissions team will call you within
-    24 hours to confirm a class and batch.
+    Browse the courses we offer below. Ready to join? Apply Now and send
+    us the student's details — we'll contact the guardian to verify before
+    admission is confirmed. Just have a question? Send us an inquiry at the
+    bottom of the page.
   </p>
+  <div class="mt-8 flex flex-wrap gap-4">
+    <a href="{% url 'apply' %}" class="btn btn-primary">Apply Now</a>
+    <a href="#admission-inquiry-form" class="btn btn-outline">Send an inquiry</a>
+  </div>
 </section>
 
 {% if admission_infos %}
@@ -18,6 +24,7 @@
     <div
       data-reveal
       data-admission-card
+      data-id="{{ info.id }}"
       data-title="{{ info.title }}"
       data-image="{% if info.image_url %}{{ info.image_url }}{% endif %}"
       data-description="{{ info.description|default:'' }}"
@@ -90,7 +97,8 @@
 
       <p id="admissionModalDescription" class="text-muted leading-relaxed whitespace-pre-line"></p>
 
-      <a href="#admission-inquiry-form" id="admissionModalApply"
+      <a href="{% url 'apply' %}" id="admissionModalApply"
+         data-apply-url="{% url 'apply' %}"
          class="btn btn-primary inline-block mt-7">Apply Now</a>
     </div>
   </div>
@@ -135,6 +143,12 @@
       titleEl.textContent = title;
       descEl.textContent = description;
 
+      // Send the chosen course along so the application form opens with
+      // it already selected.
+      var courseId = card.getAttribute('data-id');
+      applyBtn.href = applyBtn.getAttribute('data-apply-url') +
+        (courseId ? '?course=' + encodeURIComponent(courseId) : '');
+
       if (image) {
         img.src = image;
         img.alt = title;
@@ -172,7 +186,7 @@
         modal.classList.remove('flex');
       }, 180);
       if (lastFocused && typeof lastFocused.focus === 'function') {
-        lastFocused.focus();
+        lastFocused.focus({ preventScroll: true });
       }
     }
 
@@ -188,7 +202,6 @@
       });
     });
 
-    applyBtn.addEventListener('click', closeModal);
     closeBtn.addEventListener('click', closeModal);
     overlay.addEventListener('click', closeModal);
     document.addEventListener('keydown', function (e) {
@@ -203,7 +216,11 @@
 
 <section data-reveal id="admission-inquiry-form" class="max-w-6xl mx-auto px-6 py-16">
   <div class="max-w-2xl mx-auto">
-    <h2 class="text-2xl font-bold mb-8 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Admission Inquiry Form</h2>
+    <h2 class="text-2xl font-bold mb-3 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Have a question? Send an inquiry</h2>
+    <p class="text-sm text-muted mb-8">
+      Not ready to apply yet? Leave your details and we'll call you back.
+      To start an application, use <a href="{% url 'apply' %}" class="font-bold text-brand underline">Apply Now</a>.
+    </p>
     <form method="post" class="space-y-5" novalidate>
       {% csrf_token %}
 
@@ -241,7 +258,7 @@
 
       <button type="submit"
               class="btn btn-primary w-full text-center">
-        Submit Inquiry
+        Send Inquiry
       </button>
     </form>
   </div>

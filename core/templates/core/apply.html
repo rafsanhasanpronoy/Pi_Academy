@@ -1,0 +1,127 @@
+{% extends "core/base.html" %}
+{% block title %}Apply Now — Pi - π Academy{% endblock %}
+
+{% block content %}
+<section data-reveal class="max-w-6xl mx-auto px-6 pt-16 pb-10">
+  <p class="eyebrow mb-3">Apply Now</p>
+  <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Apply for Admission</h1>
+  <p class="mt-5 text-lg text-muted max-w-2xl leading-relaxed">
+    Tell us about the student and the course you'd like to join. This sends
+    us your application — it does not confirm admission. We verify every
+    application with the guardian first.
+  </p>
+</section>
+
+<section data-reveal class="max-w-6xl mx-auto px-6 pb-12">
+  <div class="border border-hair rounded-2xl bg-surface p-7 md:p-8">
+    <h2 class="text-lg font-bold mb-5">How admission works</h2>
+    <ol class="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm">
+      <li>
+        <span class="eyebrow block mb-1">Step 1</span>
+        <span class="font-bold block mb-1">Send your application</span>
+        <span class="text-muted leading-relaxed">Fill in the form below with the student's and guardian's details.</span>
+      </li>
+      <li>
+        <span class="eyebrow block mb-1">Step 2</span>
+        <span class="font-bold block mb-1">We contact the guardian</span>
+        <span class="text-muted leading-relaxed">Our team calls the guardian's number to review the application.</span>
+      </li>
+      <li>
+        <span class="eyebrow block mb-1">Step 3</span>
+        <span class="font-bold block mb-1">Guardian visits or confirms</span>
+        <span class="text-muted leading-relaxed">A guardian visits the academy or confirms details with us directly.</span>
+      </li>
+      <li>
+        <span class="eyebrow block mb-1">Step 4</span>
+        <span class="font-bold block mb-1">Admission confirmed</span>
+        <span class="text-muted leading-relaxed">Only once verification is complete is the student admitted.</span>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<div class="ruler-divider"></div>
+
+<section data-reveal class="max-w-6xl mx-auto px-6 py-16">
+  <div class="max-w-3xl mx-auto">
+    {% if not has_courses %}
+    <div class="border border-hair rounded-2xl bg-surface p-8 text-center">
+      <h2 class="text-xl font-bold mb-2">Applications aren't open right now</h2>
+      <p class="text-muted leading-relaxed mb-6">
+        There are no courses open for applications at the moment. Please
+        get in touch and we'll let you know when admission opens.
+      </p>
+      <a href="{% url 'contact' %}" class="btn btn-primary">Contact us</a>
+    </div>
+    {% else %}
+    <form method="post" class="space-y-10" novalidate>
+      {% csrf_token %}
+
+      <!-- Honeypot: invisible to people, filled in by bots, rejected in
+           AdmissionApplicationForm.clean_website(). -->
+      <div class="hidden" aria-hidden="true">
+        {{ form.website.label_tag }}
+        {{ form.website }}
+      </div>
+
+      {% if form.non_field_errors %}
+      <div class="border-l-4 border-brand bg-brand/5 px-5 py-4 text-sm font-semibold">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div>
+        <h2 class="text-xl font-bold mb-6 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Course</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {% include "core/_apply_field.html" with field=form.course full=True %}
+          {% include "core/_apply_field.html" with field=form.preferred_batch full=True %}
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-bold mb-6 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Student details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {% include "core/_apply_field.html" with field=form.student_name full=True %}
+          {% include "core/_apply_field.html" with field=form.date_of_birth %}
+          {% include "core/_apply_field.html" with field=form.gender %}
+          {% include "core/_apply_field.html" with field=form.institution_name full=True %}
+          {% include "core/_apply_field.html" with field=form.blood_group %}
+          {% include "core/_apply_field.html" with field=form.student_phone %}
+          {% include "core/_apply_field.html" with field=form.address full=True %}
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-bold mb-2 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Guardian details</h2>
+        <p class="text-sm text-muted mb-6">We'll call this number to verify the application, so please make sure it's correct and reachable.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {% include "core/_apply_field.html" with field=form.guardian_name %}
+          {% include "core/_apply_field.html" with field=form.guardian_relation %}
+          {% include "core/_apply_field.html" with field=form.guardian_phone full=True %}
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-bold mb-6 flex items-center"><svg class="tick-svg" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>Anything else</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {% include "core/_apply_field.html" with field=form.reference full=True %}
+          {% include "core/_apply_field.html" with field=form.message full=True %}
+        </div>
+      </div>
+
+      <div class="border border-hair rounded-2xl bg-surface p-6">
+        <label class="flex items-start gap-3 cursor-pointer">
+          {{ form.understand }}
+          <span class="text-sm leading-relaxed">{{ form.understand.label }}</span>
+        </label>
+        {% for error in form.understand.errors %}
+        <p class="text-xs text-brand mt-2 font-semibold">{{ error }}</p>
+        {% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary w-full text-center">Submit Application</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

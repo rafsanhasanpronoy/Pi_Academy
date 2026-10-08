@@ -41,6 +41,13 @@
       {% if form.exam_date.errors %}<div class="form-error">{{ form.exam_date.errors.0 }}</div>{% endif %}
     </div>
 
+    <div class="form-field">
+      <label class="form-label" for="{{ form.full_marks.id_for_label }}">{{ form.full_marks.label }}</label>
+      {{ form.full_marks }}
+      {% if form.full_marks.help_text %}<p class="form-help">{{ form.full_marks.help_text }}</p>{% endif %}
+      {% if form.full_marks.errors %}<div class="form-error">{{ form.full_marks.errors.0 }}</div>{% endif %}
+    </div>
+
     <div class="form-actions">
       <button type="submit" class="btn btn-accent">{% if instance %}Save Changes{% else %}Add Exam{% endif %}</button>
       <a href="{% if instance %}{% url 'admin:core_exam_view' instance.pk %}{% else %}{% url 'admin:core_exam_changelist' %}{% endif %}" class="btn btn-ghost">Cancel</a>

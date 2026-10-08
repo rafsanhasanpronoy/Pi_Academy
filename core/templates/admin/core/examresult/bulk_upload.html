@@ -18,7 +18,7 @@
 <div class="panel form-card" style="margin-bottom:28px;">
   <p class="form-label" style="margin-bottom:12px;">Step 1 — Download the mark sheet</p>
   <p style="font-size:0.9rem; color:var(--muted); margin:0 0 16px;">
-    Pre-filled with every student currently in {{ exam.class_obj.class_name }}, with one column per subject. Fill in marks under each subject — leave a cell blank to skip that subject for that student. Re-uploading later with corrected marks will update the existing results, not duplicate them.
+    Pre-filled with every student currently in {{ exam.class_obj.class_name }}, with one column per subject. Fill in marks under each subject — leave a cell blank to skip that subject for that student. Every subject is marked out of <strong>{{ exam.full_marks|floatformat:"-2" }}</strong> — marks above that, negative marks and text are rejected and listed below. Grades are calculated automatically. Re-uploading later with corrected marks will update the existing results, not duplicate them.
   </p>
   <a href="{% url 'admin:core_examresult_bulk_template' %}?exam={{ exam.pk }}" class="btn btn-ghost">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>

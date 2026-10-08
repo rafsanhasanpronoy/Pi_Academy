@@ -1,0 +1,53 @@
+{% extends "core/base.html" %}
+{% block title %}Application Received — Pi - π Academy{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto px-6 pt-16 pb-20">
+  <p class="eyebrow mb-3">Application received</p>
+  <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Thank you{% if student_name %}, we have {{ student_name }}'s application{% endif %}.</h1>
+
+  <div class="mt-8 border border-hair rounded-2xl bg-surface p-7">
+    <p class="text-sm text-muted mb-1">Your application number</p>
+    <p class="text-3xl font-bold tracking-wide">{{ application_ref }}</p>
+    {% if course_title %}<p class="text-sm text-muted mt-3">Course: <span class="font-bold text-ink">{{ course_title }}</span></p>{% endif %}
+    <p class="text-xs text-muted mt-3">Please keep this number — mention it when you call or visit.</p>
+  </div>
+
+  <div class="mt-8 border-l-4 border-brand bg-brand/5 px-6 py-5">
+    <p class="font-bold mb-1">This is not a confirmed admission yet.</p>
+    <p class="text-sm leading-relaxed">
+      Every admission has to be verified. A guardian needs to either visit
+      the academy or speak with our team before the student is admitted.
+      We'll call the guardian's number soon to arrange this.
+    </p>
+  </div>
+
+  <h2 class="text-xl font-bold mt-12 mb-4">What to do next</h2>
+  <ul class="space-y-3 text-sm leading-relaxed">
+    <li class="flex gap-3"><svg class="tick-svg shrink-0" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg><span>Keep the guardian's phone on — we'll call to review the application.</span></li>
+    <li class="flex gap-3"><svg class="tick-svg shrink-0" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg><span>Or come in any time during office hours and mention your application number.</span></li>
+  </ul>
+
+  <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
+    <div>
+      <p class="eyebrow mb-2">Visit us</p>
+      <p class="text-muted leading-relaxed">Narayanganj, Dhaka, Bangladesh</p>
+    </div>
+    <div>
+      <p class="eyebrow mb-2">Office hours</p>
+      <p class="text-muted leading-relaxed">Saturday – Thursday, 9:00 AM – 8:00 PM</p>
+    </div>
+    {% if contact_phone %}
+    <div>
+      <p class="eyebrow mb-2">Call us</p>
+      <p class="text-muted leading-relaxed"><a href="tel:{{ contact_phone }}" class="font-bold text-ink">{{ contact_phone }}</a></p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="mt-12 flex flex-wrap gap-4">
+    <a href="{% url 'home' %}" class="btn btn-primary">Back to home</a>
+    <a href="{% url 'contact' %}" class="btn btn-outline">Contact us</a>
+  </div>
+</section>
+{% endblock %}

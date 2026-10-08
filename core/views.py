@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import F, Prefetch
@@ -6,7 +7,10 @@ from django.shortcuts import redirect, render
 # pip install django-ratelimit
 from django_ratelimit.decorators import ratelimit
 
-from .forms import AdmissionInquiryForm, ContactMessageForm, StudentLookupForm
+from .results import reports_for_student
+from .forms import (
+    AdmissionApplicationForm, AdmissionInquiryForm, ContactMessageForm, StudentLookupForm,
+)
 from .models import (
     Achievement,
     AdmissionInfo,
@@ -44,7 +48,7 @@ def admission(request):
             form.save()
             messages.success(
                 request,
-                "Your inquiry has been received. Our team will call you within 24 hours.",
+                "Your inquiry has been received. Our team will call you back soon.",
             )
             return redirect("admission")
     else:
@@ -55,6 +59,49 @@ def admission(request):
         "admission_infos": AdmissionInfo.objects.filter(is_active=True),
     }
     return render(request, "core/admission.html", context)
+
+
+def apply(request):
+    """The "Apply Now" flow. Collects the student's details and the course
+    they want, then saves a pending AdmissionApplication — it does NOT
+    admit anyone. Admission is confirmed only after staff verify with the
+    guardian (a visit or a call), so the confirmation page says so."""
+    if request.method == "POST":
+        form = AdmissionApplicationForm(request.POST)
+        if form.is_valid():
+            application = form.save()
+            request.session["application_ref"] = application.reference_code
+            request.session["application_name"] = application.student_name
+            request.session["application_course"] = application.course_title or ""
+            return redirect("apply_done")
+    else:
+        initial = {}
+        # Arriving from a course's "Apply Now" button: ?course=<id>
+        course_id = request.GET.get("course", "")
+        if course_id.isdigit() and AdmissionInfo.objects.filter(
+            pk=course_id, is_active=True
+        ).exists():
+            initial["course"] = int(course_id)
+        form = AdmissionApplicationForm(initial=initial)
+
+    return render(request, "core/apply.html", {
+        "form": form,
+        "has_courses": AdmissionInfo.objects.filter(is_active=True).exists(),
+    })
+
+
+def apply_done(request):
+    """What the person sees after applying. Read from the session rather
+    than the URL so application numbers can't be guessed or browsed."""
+    ref = request.session.get("application_ref")
+    if not ref:
+        return redirect("apply")
+    return render(request, "core/apply_done.html", {
+        "application_ref": ref,
+        "student_name": request.session.get("application_name", ""),
+        "course_title": request.session.get("application_course", ""),
+        "contact_phone": settings.ACADEMY_CONTACT_PHONE,
+    })
 
 
 def notices_list(request):
@@ -139,14 +186,7 @@ def student_results(request):
             ).first()
 
             if student:
-                results_qs = (
-                    ExamResult.objects.filter(student=student)
-                    .select_related("exam", "subject")
-                    .order_by("-exam__exam_date")
-                )
-                exams = {}
-                for result in results_qs:
-                    exams.setdefault(result.exam, []).append(result)
+                exam_reports = reports_for_student(student)
 
                 attendance_qs = Attendance.objects.filter(student=student)
                 attendance_summary = {
@@ -158,7 +198,7 @@ def student_results(request):
 
                 context.update({
                     "student": student,
-                    "exams": exams,
+                    "exam_reports": exam_reports,
                     "attendance_summary": attendance_summary,
                     "recent_attendance": attendance_qs.order_by("-attendance_date")[:10],
                     "searched": True,

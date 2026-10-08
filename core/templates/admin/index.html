@@ -156,6 +156,11 @@
     <p class="stat-value">{{ dashboard_stats.today_present }} / {{ dashboard_stats.today_total }}</p>
     <p class="stat-note">Students marked present so far</p>
   </div> -->
+  <div class="stat-card {% if dashboard_stats.pending_applications %}alert{% endif %}">
+    <p class="stat-label">Applications to verify</p>
+    <p class="stat-value">{{ dashboard_stats.pending_applications }}</p>
+    <p class="stat-note">From the Apply Now form</p>
+  </div>
   <div class="stat-card {% if dashboard_stats.pending_inquiries %}alert{% endif %}">
     <p class="stat-label">New admission inquiries</p>
     <p class="stat-value">{{ dashboard_stats.pending_inquiries }}</p>

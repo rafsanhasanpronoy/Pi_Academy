@@ -11,12 +11,14 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from urllib.parse import urlencode
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from django.db.models import Count, Q, Sum
+from .results import grade_for, reports_for_student
 from .forms import (
-    AchievementForm, AdmissionInfoForm, AdmissionInquiryAdminForm, BatchForm, ClassForm,
+    AchievementForm, AdmissionApplicationAdminForm, AdmissionInfoForm, AdmissionInquiryAdminForm, BatchForm, ClassForm,
     ClassScheduleForm, ContactMessageAdminForm, ExamForm, ExamResultForm, ExpenseForm, FacultyForm,
     GalleryForm, GallerySectionForm, GallerySubsectionForm, NoticeForm, StudentForm,
     StudentPaymentForm, StudentPaymentReceiptForm, SubjectForm, TeacherSalaryForm,
@@ -46,6 +48,7 @@ from .models import (
     GallerySection,
     GallerySubsection,
     Notice,
+    AdmissionApplication,
     AdmissionInfo,
     AdmissionInquiry,
     ContactMessage,
@@ -937,6 +940,7 @@ class StudentAdmin(admin.ModelAdmin):
         context = dict(
             self.admin_site.each_context(request),
             instance=instance,
+            exam_reports=reports_for_student(instance),
             receipts=receipts,
             total_paid=total_paid,
             active_section="students",
@@ -946,6 +950,18 @@ class StudentAdmin(admin.ModelAdmin):
         return TemplateResponse(request, "admin/core/student/detail.html", context)
 
     def _student_form_view(self, request, instance):
+        # Arriving from an application's "Start admission" button passes
+        # ?application=<id>: pre-fill the form from it, and once the
+        # student is saved, mark that application Admitted and link it.
+        application = None
+        if instance is None:
+            app_id = request.POST.get("application") or request.GET.get("application")
+            if app_id and str(app_id).isdigit():
+                application = (
+                    AdmissionApplication.objects.select_related("course")
+                    .filter(pk=app_id).exclude(status="Admitted").first()
+                )
+
         if request.method == "POST":
             form = StudentForm(request.POST, request.FILES, instance=instance)
             if form.is_valid():
@@ -957,18 +973,26 @@ class StudentAdmin(admin.ModelAdmin):
                         student.class_obj, student.batch
                     )
                 student.save()
+                if application is not None:
+                    application.status = "Admitted"
+                    application.student = student
+                    application.save(update_fields=["status", "student"])
                 self.message_user(
                     request,
-                    f"Student {'updated' if instance else 'added'} successfully.",
+                    f"Student {'updated' if instance else 'added'} successfully."
+                    + (f" Application {application.reference_code} marked Admitted."
+                       if application is not None else ""),
                     level=messages.SUCCESS,
                 )
                 return redirect("admin:core_student_changelist")
         else:
-            form = StudentForm(instance=instance)
+            initial = _student_initial_from_application(application) if application else {}
+            form = StudentForm(instance=instance, initial=initial)
         context = dict(
             self.admin_site.each_context(request),
             form=form,
             instance=instance,
+            source_application=application,
             active_section="students",
             active_page="student_edit" if instance else "student_add",
             opts=self.model._meta,
@@ -1762,12 +1786,40 @@ class ExamAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                "<int:exam_id>/recalculate-grades/",
+                self.admin_site.admin_view(self.recalculate_grades_view),
+                name="core_exam_recalculate_grades",
+            ),
+            path(
                 "<path:object_id>/view/",
                 self.admin_site.admin_view(self.view_view),
                 name="core_exam_view",
             ),
         ]
         return custom_urls + urls
+
+    def recalculate_grades_view(self, request, exam_id):
+        """Re-work every grade in this exam from its marks. Fills in the
+        grades on results saved before grading existed, and re-grades
+        everything if the exam's full marks were changed. Overwrites any
+        grade that was typed in by hand, so the page asks first."""
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        exam = get_object_or_404(Exam, pk=exam_id)
+        if request.method == "POST":
+            updated = 0
+            for result in ExamResult.objects.filter(exam=exam):
+                new_grade = grade_for(result.marks, exam.full_marks)[0]
+                if result.grade != new_grade:
+                    result.grade = new_grade
+                    result.save(update_fields=["grade"])
+                    updated += 1
+            self.message_user(
+                request,
+                f"Grades recalculated — {updated} result{'s' if updated != 1 else ''} updated.",
+                level=messages.SUCCESS,
+            )
+        return redirect("admin:core_exam_view", exam.pk)
 
     def add_view(self, request, form_url="", extra_context=None):
         if not self.has_add_permission(request):
@@ -1965,6 +2017,20 @@ class ExamResultAdmin(admin.ModelAdmin):
         for col_idx in range(1, len(headers) + 1):
             sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 22
 
+        # A second sheet with the ground rules; the upload only ever reads
+        # the first sheet, so this never gets in the way.
+        info = workbook.create_sheet("Read me")
+        info.column_dimensions["A"].width = 90
+        for line in (
+            f"{exam.exam_name} — {exam.class_obj.class_name}",
+            f"Every subject is marked out of {exam.full_marks:g}.",
+            "Type each student's marks under the subject. Leave a cell blank to skip it.",
+            "Marks above the full marks, negative marks or text are rejected and listed after upload.",
+            "Grades are calculated automatically when you upload — don't add a grade column.",
+            "Re-uploading corrected marks updates the existing results.",
+        ):
+            info.append([line])
+
         buffer = BytesIO()
         workbook.save(buffer)
         buffer.seek(0)
@@ -2051,6 +2117,7 @@ class ExamResultAdmin(admin.ModelAdmin):
             )
 
         saved_count = 0
+        seen_students = set()
         for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
             if row is None or all(v in (None, "") for v in row):
                 continue  # skip fully blank rows
@@ -2068,6 +2135,13 @@ class ExamResultAdmin(admin.ModelAdmin):
                 )
                 continue
 
+            if student.pk in seen_students:
+                errors.append(
+                    f"Row {row_num} ({student.full_name}): this student appears more "
+                    f"than once in the sheet — this row overrides the earlier one."
+                )
+            seen_students.add(student.pk)
+
             for col_idx, subject in enumerate(resolved_subjects, start=2):
                 if subject is None or col_idx >= len(row):
                     continue
@@ -2075,11 +2149,17 @@ class ExamResultAdmin(admin.ModelAdmin):
                 if raw_marks in (None, ""):
                     continue
                 try:
-                    marks = Decimal(str(raw_marks))
+                    marks = Decimal(str(raw_marks).strip())
                 except (InvalidOperation, ValueError):
                     errors.append(
                         f"Row {row_num} ({student.full_name}), {subject.subject_name}: "
                         f"'{raw_marks}' isn't a number — skipped."
+                    )
+                    continue
+                if not marks.is_finite():  # 'NaN' / 'Infinity' typed into a cell
+                    errors.append(
+                        f"Row {row_num} ({student.full_name}), {subject.subject_name}: "
+                        f"'{raw_marks}' isn't a valid mark — skipped."
                     )
                     continue
                 if marks < 0:
@@ -2088,10 +2168,18 @@ class ExamResultAdmin(admin.ModelAdmin):
                         f"marks can't be negative — skipped."
                     )
                     continue
+                if marks > exam.full_marks:
+                    errors.append(
+                        f"Row {row_num} ({student.full_name}), {subject.subject_name}: "
+                        f"{marks:g} is more than the exam's full marks "
+                        f"({exam.full_marks:g}) — skipped."
+                    )
+                    continue
 
+                marks = marks.quantize(Decimal("0.01"))
                 ExamResult.objects.update_or_create(
                     exam=exam, student=student, subject=subject,
-                    defaults={"marks": marks},
+                    defaults={"marks": marks, "grade": grade_for(marks, exam.full_marks)[0]},
                 )
                 saved_count += 1
 
@@ -4119,6 +4207,215 @@ class ContactMessageAdmin(admin.ModelAdmin):
         return redirect("admin:core_contactmessage_changelist")
 
 
+def _student_initial_from_application(application):
+    """Maps an AdmissionApplication onto StudentForm's fields. Class and
+    batch are left for staff to choose (the application records a course,
+    not a class); the guardian goes into father/mother when the relation
+    says so, otherwise staff see them in the banner on the form."""
+    initial = {
+        "full_name": application.student_name,
+        "date_of_birth": application.date_of_birth,
+        "gender": application.gender or "",
+        "student_phone": application.student_phone or "",
+        "institution_name": application.institution_name or "",
+        "blood_group": application.blood_group or "",
+        "address": application.address or "",
+        "reference": application.reference or "",
+        "admission_date": timezone.localdate(),
+        "status": "Active",
+    }
+    if application.guardian_relation == "Father":
+        initial["father_name"] = application.guardian_name
+        initial["father_phone"] = application.guardian_phone
+    elif application.guardian_relation == "Mother":
+        initial["mother_name"] = application.guardian_name
+        initial["mother_phone"] = application.guardian_phone
+    return initial
+
+
+@admin.register(AdmissionApplication)
+class AdmissionApplicationAdmin(admin.ModelAdmin):
+    """Applications from the public "Apply Now" form. Staff verify each
+    one with the guardian, then use "Start admission" to create the real
+    Student record — nothing here admits anyone automatically."""
+
+    search_fields = ("student_name", "guardian_name", "guardian_phone", "course_title")
+
+    # Statuses staff can jump to with one click from the detail page.
+    # "Admitted" is deliberately not one of them: it is only set by
+    # actually creating the student (see StudentAdmin._student_form_view).
+    QUICK_STATUSES = ("Pending", "Contacted", "Verified", "Rejected")
+
+    def _filtered_applications(self, request):
+        applications = AdmissionApplication.objects.select_related("course", "student").order_by("-created_at", "-id")
+
+        query = request.GET.get("q", "").strip()
+        if query:
+            applications = applications.filter(
+                Q(student_name__icontains=query)
+                | Q(guardian_name__icontains=query)
+                | Q(guardian_phone__icontains=query)
+                | Q(course_title__icontains=query)
+            )
+
+        active_status = request.GET.get("status", "").strip()
+        if active_status:
+            applications = applications.filter(status=active_status)
+        return applications, query, active_status
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        applications, query, active_status = self._filtered_applications(request)
+
+        counts = dict(
+            AdmissionApplication.objects.values_list("status").annotate(n=Count("id"))
+        )
+        status_cards = [
+            {"value": value, "label": label, "count": counts.get(value, 0)}
+            for value, label in AdmissionApplication.STATUS_CHOICES
+        ]
+
+        paginator = Paginator(applications, 15)
+        page_obj = paginator.get_page(request.GET.get("page"))
+        preserved_params = request.GET.copy()
+        preserved_params.pop("page", None)
+
+        context = dict(
+            self.admin_site.each_context(request),
+            applications=page_obj,
+            page_obj=page_obj,
+            page_range=_pagination_range(page_obj.number, paginator.num_pages),
+            preserved_querystring=preserved_params.urlencode(),
+            status_cards=status_cards,
+            status_choices=AdmissionApplication.STATUS_CHOICES,
+            active_status=active_status,
+            search_query=query,
+            active_section="inbox",
+            active_page="admissionapplication_list",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/admissionapplication/list.html", context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:application_id>/set-status/",
+                self.admin_site.admin_view(self.set_status_view),
+                name="core_admissionapplication_set_status",
+            ),
+            path(
+                "<int:application_id>/start-admission/",
+                self.admin_site.admin_view(self.start_admission_view),
+                name="core_admissionapplication_start_admission",
+            ),
+            path(
+                "<path:object_id>/view/",
+                self.admin_site.admin_view(self.view_view),
+                name="core_admissionapplication_view",
+            ),
+        ]
+        return custom_urls + urls
+
+    def view_view(self, request, object_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(
+            AdmissionApplication.objects.select_related("course", "student"), pk=object_id
+        )
+        context = dict(
+            self.admin_site.each_context(request),
+            instance=instance,
+            quick_statuses=[
+                (value, label) for value, label in AdmissionApplication.STATUS_CHOICES
+                if value in self.QUICK_STATUSES and value != instance.status
+            ],
+            active_section="inbox",
+            active_page="admissionapplication_view",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/admissionapplication/detail.html", context)
+
+    def set_status_view(self, request, application_id):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(AdmissionApplication, pk=application_id)
+        if request.method == "POST":
+            new_status = request.POST.get("status", "")
+            if new_status in self.QUICK_STATUSES:
+                if application.status == "Admitted":
+                    self.message_user(
+                        request, "This application is already admitted.", level=messages.WARNING
+                    )
+                else:
+                    application.status = new_status
+                    application.save(update_fields=["status"])
+                    self.message_user(
+                        request,
+                        f"{application.reference_code} marked {application.get_status_display()}.",
+                        level=messages.SUCCESS,
+                    )
+        return redirect("admin:core_admissionapplication_view", application.pk)
+
+    def start_admission_view(self, request, application_id):
+        """Opens the Add Student form pre-filled from this application."""
+        if not self.has_add_permission(request) and not request.user.has_perm("core.add_student"):
+            raise PermissionDenied
+        application = get_object_or_404(AdmissionApplication, pk=application_id)
+        if application.status == "Admitted" and application.student_id:
+            self.message_user(
+                request, "This application has already been admitted.", level=messages.INFO
+            )
+            return redirect("admin:core_student_view", application.student_id)
+        return redirect(
+            reverse("admin:core_student_add") + "?" + urlencode({"application": application.pk})
+        )
+
+    def add_view(self, request, form_url="", extra_context=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        return self._application_form_view(request, instance=None)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        instance = get_object_or_404(AdmissionApplication, pk=object_id)
+        return self._application_form_view(request, instance=instance)
+
+    def _application_form_view(self, request, instance):
+        if request.method == "POST":
+            form = AdmissionApplicationAdminForm(request.POST, instance=instance)
+            if form.is_valid():
+                form.save()
+                self.message_user(
+                    request,
+                    f"Application {'updated' if instance else 'added'} successfully.",
+                    level=messages.SUCCESS,
+                )
+                return redirect("admin:core_admissionapplication_changelist")
+        else:
+            form = AdmissionApplicationAdminForm(instance=instance)
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            instance=instance,
+            active_section="inbox",
+            active_page="admissionapplication_edit" if instance else "admissionapplication_add",
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, "admin/core/admissionapplication/form.html", context)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            obj = get_object_or_404(AdmissionApplication, pk=object_id)
+            obj.delete()
+            self.message_user(request, "Application deleted.", level=messages.SUCCESS)
+        return redirect("admin:core_admissionapplication_changelist")
+
+
 # ---------------------------------------------------------
 # Finance summary + Other Expenses
 # ---------------------------------------------------------
@@ -4328,6 +4625,7 @@ _DASHBOARD_LAYOUT = [
         ("Admission Infos", "core_admissioninfo", lambda: AdmissionInfo.objects.count()),
     ]),
     ("Inbox", [
+        ("Admission Applications", "core_admissionapplication", lambda: AdmissionApplication.objects.filter(status="Pending").count()),
         ("Admission Inquiries", "core_admissioninquiry", lambda: AdmissionInquiry.objects.filter(status="New").count()),
         ("Contact Messages", "core_contactmessage", lambda: ContactMessage.objects.filter(status="Unread").count()),
     ]),
@@ -4396,6 +4694,7 @@ def _each_context_with_dashboard(request):
         "active_students": Student.objects.filter(status="Active").count(),
         "total_faculty": Faculty.objects.count(),
         "pending_inquiries": AdmissionInquiry.objects.filter(status="New").count(),
+        "pending_applications": AdmissionApplication.objects.filter(status="Pending").count(),
         "unread_messages": ContactMessage.objects.filter(status="Unread").count(),
         "today_present": todays_attendance.filter(status="Present").count(),
         "today_total": todays_attendance.count(),
