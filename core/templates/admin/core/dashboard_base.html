@@ -357,10 +357,155 @@
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
+  /* ================= Responsive ================= */
+
+  .topbar-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .menu-toggle, .sidebar-close { display: none; }
+  .sidebar-overlay { display: none; }
+  .sidebar { overscroll-behavior: contain; }
+
+  /* Wide tables scroll inside their own panel instead of pushing the
+     whole page sideways. (Wrapped by the script at the bottom.) */
+  .table-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%;
+    /* soft shadows at an edge that has more to scroll to */
+    background:
+      linear-gradient(to right, var(--surface) 30%, rgba(255,255,255,0)) left center / 40px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 30%, rgba(255,255,255,0)) right center / 40px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(32,42,32,0.16), rgba(32,42,32,0)) left center / 12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(32,42,32,0.16), rgba(32,42,32,0)) right center / 12px 100% no-repeat scroll;
+  }
+  /* In a table that has to scroll, keep each row's buttons on one line
+     rather than squashing them into a column */
+  @media (max-width: 1180px) { .dash-table .row-actions { flex-wrap: nowrap; } }
+
+  /* Tablet and phone: the sidebar becomes a slide-in menu */
   @media (max-width: 860px) {
-    .sidebar { display: none; }
+    .menu-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 42px; height: 42px; flex-shrink: 0;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      border-radius: var(--radius-sm); cursor: pointer; padding: 0;
+    }
+    .menu-toggle svg { width: 20px; height: 20px; }
+    .topbar { padding: 10px 16px; gap: 12px; }
+    .topbar-crumb { flex: 1; }
     .content { padding: 22px 18px 48px; }
-    .topbar { padding: 14px 18px; }
+
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; z-index: 50;
+      width: min(86vw, 300px); height: 100vh; height: 100dvh;
+      transform: translateX(-100%); visibility: hidden;
+      transition: transform 0.22s ease, visibility 0s linear 0.22s;
+      box-shadow: none;
+    }
+    .sidebar.open {
+      transform: none; visibility: visible;
+      transition: transform 0.22s ease, visibility 0s;
+      box-shadow: 0 0 40px rgba(20, 28, 20, 0.25);
+    }
+    .sidebar-close {
+      display: inline-flex; align-items: center; justify-content: center;
+      position: absolute; top: 14px; right: 12px;
+      width: 38px; height: 38px; border-radius: var(--radius-sm);
+      border: none; background: transparent; color: var(--muted);
+      font-size: 1.7rem; line-height: 1; cursor: pointer;
+    }
+    .sidebar-close:hover { background: var(--surface-2); color: var(--text); }
+    .sidebar-overlay {
+      display: block; position: fixed; inset: 0; z-index: 40;
+      background: rgba(20, 28, 20, 0.45);
+      opacity: 0; pointer-events: none; transition: opacity 0.22s ease;
+    }
+    .sidebar-overlay.show { opacity: 1; pointer-events: auto; }
+    body.menu-open { overflow: hidden; }
+    .nav-link { padding: 13px 12px; }   /* comfortable touch targets */
+  }
+
+  /* Phone */
+  @media (max-width: 640px) {
+    body { font-size: 15px; }
+    .content { padding: 16px 14px 40px; }
+    .topbar { padding: 8px 12px; gap: 8px; }
+    .topbar-crumb { font-size: 0.96rem; }
+    .topbar-right { gap: 6px; }
+    .topbar-divider, .topbar-user-name, .topbar-link-text { display: none; }
+    .topbar-link { padding: 10px; }
+    .topbar-actions { gap: 0; }
+
+    .page-header { gap: 12px; margin-bottom: 18px; align-items: flex-start; flex-direction: column; }
+    .page-header > .row-actions, .page-header > div:last-child:not(:first-child) { width: 100%; }
+    .page-title { font-size: 1.28rem; }
+    .row-actions { gap: 8px; }
+    .page-header .row-actions .btn { flex: 1 1 auto; justify-content: center; }
+    .btn-sm { min-height: 40px; padding: 8px 14px; }
+
+    .form-card, .form-card-wide { padding: 20px 16px; max-width: none; }
+    .form-actions { flex-wrap: wrap; }
+    .form-actions .btn { flex: 1 1 auto; justify-content: center; }
+    /* 16px stops iOS Safari zooming the page when a field is focused */
+    input[type="text"], input[type="password"], input[type="email"],
+    input[type="number"], input[type="date"], input[type="time"],
+    input[type="month"], input[type="tel"], select, textarea { font-size: 16px; min-width: 0; }
+    .empty-state { padding: 44px 16px; }
+
+    /* Tables: each row becomes a labelled card. Labels are filled in
+       from the column headings by the script at the bottom of the page.
+       Tables with many columns (grids, month-by-month sheets) are left as
+       real tables that scroll sideways inside their panel. */
+    .dash-table.is-stacked,
+    .dash-table.is-stacked tbody,
+    .dash-table.is-stacked tr,
+    .dash-table.is-stacked td { display: block; width: 100%; }
+    .dash-table.is-stacked thead {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+    }
+    .dash-table.is-stacked tbody tr { padding: 8px 0; border-bottom: 8px solid var(--bg); }
+    .dash-table.is-stacked tbody tr:last-child { border-bottom: none; }
+    .dash-table.is-stacked td {
+      padding: 7px 16px; border: none; overflow-wrap: anywhere;
+    }
+    .dash-table.is-stacked td[data-label]:not([data-label=""])::before {
+      content: attr(data-label); display: block; margin-bottom: 2px;
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .dash-table.is-stacked td:empty { display: none; }
+    .dash-table.is-stacked td .row-actions { margin-top: 2px; flex-wrap: wrap; }
+    .dash-table.is-stacked td[style*="width"] { width: 100% !important; }
+    .dash-table:not(.is-stacked) th, .dash-table:not(.is-stacked) td { padding: 12px 14px; white-space: nowrap; }
+
+    /* Search / filter bars: full-width fields instead of fixed-width ones.
+       (!important because several pages set inline widths on them.) */
+    .content form[method="get"] { gap: 10px; }
+    .content form[method="get"] > input,
+    .content form[method="get"] > select { flex: 1 1 100%; max-width: none !important; width: 100%; }
+    .content form[method="get"] > div[style*="flex"] { flex: 1 1 100% !important; min-width: 0 !important; }
+    .content form[method="get"] > .btn { flex: 1 1 0; justify-content: center; }
+    .content form[method="get"] > .row-actions { width: 100%; }
+    .content input[type="month"] { width: 100%; }
+
+    /* "‹ Sep 2026 | [month picker] | Nov 2026 ›" -> picker on top, then
+       previous / next side by side */
+    .row-actions.month-nav { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .row-actions.month-nav > form { grid-column: 1 / -1; order: -1; }
+    .row-actions.month-nav input { width: 100%; min-width: 0 !important; }
+    .row-actions.month-nav > .btn { justify-content: center; }
+    .content form[method="get"] > .row-actions .btn { flex: 1 1 0; justify-content: center; }
+
+    /* Stat cards sit two to a row (the .content prefix outranks each
+       page's own .stat-grid rule) */
+    .content .stat-grid, .content .finance-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .content .stat-card { padding: 13px 14px; }
+    .content .stat-value { font-size: 1.3rem; }
+    .content .stat-note { font-size: 0.76rem; }
+    .content .finance-grid .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    .content .stat-card { min-width: 0; overflow-wrap: anywhere; }
+  }
+
+  /* Very small phones (e.g. 320px): cards with an icon don't fit two across */
+  @media (max-width: 380px) {
+    .content .stat-grid, .content .finance-grid { grid-template-columns: 1fr; }
   }
 </style>
 {% block extra_head %}{% endblock %}
@@ -368,7 +513,10 @@
 <body>
 <div class="shell">
 
-  <aside class="sidebar">
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Close menu">&times;</button>
     <div class="sidebar-brand">
       <span class="sidebar-brand-badge">&pi;</span>
       <div>
@@ -476,18 +624,21 @@
 
   <div class="main">
     <div class="topbar">
+      <button type="button" class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
       <div class="topbar-crumb">{% block crumb %}Dashboard{% endblock %}</div>
       <div class="topbar-right">
         <div class="topbar-actions">
-          <a href="/" class="topbar-link" target="_blank" rel="noopener">
+          <a href="/" class="topbar-link" target="_blank" rel="noopener" title="View site" aria-label="View site">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/></svg>
-            View site
+            <span class="topbar-link-text">View site</span>
           </a>
           <form method="post" action="{% url 'admin:logout' %}" class="topbar-logout-form">
             {% csrf_token %}
-            <button type="submit" class="topbar-link">
+            <button type="submit" class="topbar-link" title="Log out" aria-label="Log out">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 17.5 20 12l-5-5.5"/><path d="M20 12H9"/><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/></svg>
-              Log out
+              <span class="topbar-link-text">Log out</span>
             </button>
           </form>
         </div>
@@ -513,5 +664,59 @@
   </div>
 
 </div>
+<script>
+(function () {
+  /* ---- Mobile menu ---- */
+  var toggle = document.getElementById('menuToggle');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  var closeBtn = document.getElementById('sidebarClose');
+  function setOpen(open) {
+    sidebar.classList.toggle('open', open);
+    overlay.classList.toggle('show', open);
+    document.body.classList.toggle('menu-open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    if (open) {
+      var active = sidebar.querySelector('.nav-link.active');
+      if (active && active.scrollIntoView) active.scrollIntoView({ block: 'center' });
+      closeBtn.focus();
+    }
+  }
+  toggle.addEventListener('click', function () { setOpen(!sidebar.classList.contains('open')); });
+  overlay.addEventListener('click', function () { setOpen(false); });
+  closeBtn.addEventListener('click', function () { setOpen(false); toggle.focus(); });
+  sidebar.addEventListener('click', function (e) { if (e.target.closest('a')) setOpen(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) { setOpen(false); toggle.focus(); }
+  });
+  var desktop = window.matchMedia('(min-width: 861px)');
+  var onChange = function (e) { if (e.matches) setOpen(false); };
+  if (desktop.addEventListener) desktop.addEventListener('change', onChange);
+  else if (desktop.addListener) desktop.addListener(onChange);
+
+  /* ---- Tables: scroll wrapper + labels for the phone card layout ---- */
+  var MAX_STACK_COLUMNS = 8;   /* more columns than this stay a scrolling table */
+  document.querySelectorAll('table.dash-table').forEach(function (table) {
+    if (!table.parentElement.classList.contains('table-scroll')) {
+      var wrap = document.createElement('div');
+      wrap.className = 'table-scroll';
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    }
+    var heads = Array.prototype.map.call(table.querySelectorAll('thead th'), function (th) {
+      return th.textContent.replace(/\s+/g, ' ').trim();
+    });
+    if (!heads.length || heads.length > MAX_STACK_COLUMNS || table.hasAttribute('data-scroll')) return;
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      if (tr.children.length !== heads.length) return;     /* e.g. a colspan row */
+      Array.prototype.forEach.call(tr.children, function (td, i) {
+        if (td.tagName === 'TD') td.setAttribute('data-label', heads[i]);
+      });
+    });
+    table.classList.add('is-stacked');
+  });
+})();
+</script>
 </body>
 </html>

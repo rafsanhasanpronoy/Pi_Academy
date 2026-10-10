@@ -14,7 +14,7 @@
     <h1 class="page-title">Monthly Fee Status</h1>
     <p class="page-sub">{{ target_month_label }} &middot; {{ paid_count }} paid, {{ due_count }} due of {{ total_students }} active student{{ total_students|pluralize }}</p>
   </div>
-  <div class="row-actions">
+  <div class="row-actions month-nav">
     <a href="?month={{ prev_month }}" class="btn btn-ghost">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       {{ prev_month_label }}

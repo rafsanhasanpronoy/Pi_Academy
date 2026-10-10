@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admission Form — {{ student.full_name }} — {{ academy_name }}</title>
 <style>
   :root { --brand: #4e6933; --ink: #1A1A1A; --muted: #6B7280; }
@@ -136,6 +137,20 @@
     cursor: pointer;
   }
   .print-btn:hover { opacity: 0.9; }
+
+  /* Phone screens only — printing keeps the paper layout below */
+  @media screen and (max-width: 640px) {
+    body { padding: 12px; }
+    .receipt, .sheet { padding: 22px 18px; }
+    .receipt-header, .sheet-header { flex-wrap: wrap; gap: 12px; }
+    .receipt-label, .sheet-label { text-align: left; }
+    .top-row { flex-direction: column; gap: 16px; }
+    .name-block h2, .meta-item .meta-value { overflow-wrap: anywhere; }
+    .signoff { flex-wrap: wrap; gap: 28px; }
+    .signoff .line { width: 100%; }
+    .amount-box .amount-value { font-size: 1.6rem; }
+    .print-bar { text-align: center; }
+  }
 
   @media print {
     body { background: #fff; padding: 0; }

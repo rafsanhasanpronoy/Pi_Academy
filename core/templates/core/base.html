@@ -256,14 +256,20 @@
     overflow: hidden;
     transition: max-height 0.35s var(--ease), opacity 0.25s var(--ease);
   }
-  #mobileMenu.open { max-height: 32rem; opacity: 1; }
+  #mobileMenu.open {
+    max-height: calc(100vh - 5rem);
+    max-height: calc(100dvh - 5rem);
+    overflow-y: auto;
+    opacity: 1;
+  }
   #mobileMenu a {
     display: block;
-    padding: 0.6rem 0.9rem;
+    padding: 0.75rem 0.9rem;
     border-radius: 0.75rem;
     transition: background-color 0.2s var(--ease);
   }
   #mobileMenu a:hover { background: rgba(78, 105, 51, 0.08); }
+  #mobileMenu a.btn-primary, #mobileMenu a.btn-primary:hover { background: #4e6933; color: #fff; }
 
   /* Form inputs get a consistent, friendlier look site-wide without touching
      every template — rounded, soft border, brand focus ring */
@@ -294,9 +300,9 @@
       {% else %}
       <span class="w-10 h-10 rounded-full bg-gradient-to-br from-brand to-brand-dark text-white flex items-center justify-center font-display font-bold text-lg shadow-lg shadow-brand/30">&pi;</span>
       {% endif %}
-      <span class="font-display font-bold text-xl tracking-tight">Pi - π Academy</span>
+      <span class="font-display font-bold text-xl tracking-tight whitespace-nowrap">Pi - π Academy</span>
     </a>
-    <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+    <nav class="hidden xl:flex items-center gap-1 text-sm font-semibold">
       <a href="{% url 'home' %}" class="nav-link transition-colors">Home</a>
       <a href="{% url 'classes' %}" class="nav-link transition-colors">Classes</a>
       <a href="{% url 'faculty' %}" class="nav-link transition-colors">Faculty</a>
@@ -320,17 +326,17 @@
         </div>
       </div>
     </nav>
-    <a href="/admin/" class="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-full border border-hair hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors mr-3" aria-label="{% if request.user.is_staff %}Admin Dashboard{% else %}Admin Login{% endif %}" title="{% if request.user.is_staff %}Admin Dashboard{% else %}Admin Login{% endif %}">
+    <a href="/admin/" class="hidden xl:inline-flex items-center justify-center w-10 h-10 rounded-full border border-hair hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors mr-3" aria-label="{% if request.user.is_staff %}Admin Dashboard{% else %}Admin Login{% endif %}" title="{% if request.user.is_staff %}Admin Dashboard{% else %}Admin Login{% endif %}">
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
     </a>
-    <a href="{% url 'apply' %}" class="btn btn-primary hidden md:inline-block text-sm !px-5 !py-2.5">
+    <a href="{% url 'apply' %}" class="btn btn-primary hidden xl:inline-block whitespace-nowrap text-sm !px-5 !py-2.5">
       Apply Now
     </a>
-    <button id="menuBtn" class="md:hidden text-2xl leading-none w-8 h-8 flex items-center justify-center" aria-label="Toggle menu" aria-expanded="false">
+    <button id="menuBtn" class="xl:hidden text-2xl leading-none w-11 h-11 -mr-2 flex items-center justify-center" aria-label="Toggle menu" aria-expanded="false">
       <span id="menuIcon">&#9776;</span>
     </button>
   </div>
-  <nav id="mobileMenu" class="md:hidden border-t border-hair px-6 flex flex-col gap-1 text-sm font-semibold" style="border-radius:0;">
+  <nav id="mobileMenu" class="xl:hidden border-t border-hair px-6 flex flex-col gap-1 text-sm font-semibold" style="border-radius:0;">
     <div class="py-4 flex flex-col gap-1">
       <a href="{% url 'home' %}">Home</a>
       <a href="{% url 'classes' %}">Classes</a>
@@ -342,6 +348,7 @@
       <a href="{% url 'achievements' %}">Achievements</a>
       <a href="{% url 'gallery' %}">Gallery</a>
       <a href="{% url 'contact' %}">Contact</a>
+      <a href="{% url 'apply' %}" class="btn btn-primary text-center mt-3">Apply Now</a>
       <a href="/admin/" class="pt-4 mt-2 border-t border-hair !rounded-none">
         {% if request.user.is_staff %}Admin Dashboard{% else %}Admin Login{% endif %}
       </a>

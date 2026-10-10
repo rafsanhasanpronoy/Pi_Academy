@@ -1189,7 +1189,7 @@ class NavbarOrderTests(TestCase):
 
     def _menus(self):
         html = self.client.get(reverse("home")).content.decode()
-        desktop = html[html.index('<nav class="hidden md:flex'):html.index('<a href="/admin/" class="hidden md:inline-flex')]
+        desktop = html[html.index('<nav class="hidden xl:flex'):html.index('<a href="/admin/" class="hidden xl:inline-flex')]
         mobile = html[html.index('<nav id="mobileMenu"'):html.index("</header>")]
         return desktop, mobile
 
@@ -1213,5 +1213,60 @@ class NavbarOrderTests(TestCase):
         _, mobile = self._menus()
         self.assertEqual(self._order(mobile), [
             "Home", "Classes", "Faculty", "Admission", "Results",
-            "Notices", "About", "Achievements", "Gallery", "Contact",
+            "Notices", "About", "Achievements", "Gallery", "Contact", "Apply Now",
         ])
+
+
+class ResponsiveLayoutTests(TestCase):
+    """Guards for the mobile/tablet layout. (The pixel-level checks were
+    done in a real browser; these stop the key pieces being removed.)"""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.client.force_login(get_user_model().objects.create_superuser("boss", "b@x.com", "pw12345!"))
+
+    def test_every_standalone_template_declares_a_viewport(self):
+        # Without it a phone renders the page at desktop width and shrinks it.
+        import pathlib
+        root = pathlib.Path(__file__).parent / "templates"
+        missing = [str(p.relative_to(root)) for p in root.rglob("*.html")
+                   if "<!DOCTYPE html>" in p.read_text(encoding="utf-8")
+                   and 'name="viewport"' not in p.read_text(encoding="utf-8")]
+        self.assertEqual(missing, [])
+
+    def test_dashboard_has_a_mobile_menu(self):
+        html = self.client.get(reverse("admin:index")).content.decode()
+        for needle in ('id="menuToggle"', 'aria-controls="sidebar"', 'id="sidebar"',
+                       'id="sidebarOverlay"', 'id="sidebarClose"'):
+            self.assertIn(needle, html)
+
+    def test_dashboard_tables_get_the_responsive_wrapper_script(self):
+        html = self.client.get(reverse("admin:core_student_changelist")).content.decode()
+        self.assertIn("table-scroll", html)
+        self.assertIn("is-stacked", html)
+
+    def test_month_navigators_use_the_phone_layout_class(self):
+        for name in ("admin:core_studentpaymentreceipt_monthly_status", "admin:core_teachersalary_monthly_status"):
+            try:
+                url = reverse(name)
+            except Exception:
+                continue
+            self.assertContains(self.client.get(url), "month-nav")
+
+    def test_public_header_hamburger_and_apply_link_in_mobile_menu(self):
+        html = self.client.get(reverse("home")).content.decode()
+        self.assertIn('id="menuBtn"', html)
+        mobile = html[html.index('<nav id="mobileMenu"'):html.index("</header>")]
+        self.assertIn(reverse("apply"), mobile)
+
+    def test_monthly_status_shows_the_amount_actually_paid(self):
+        from datetime import date as _d
+        klass = Class.objects.create(class_name="Class 6", academic_year=2026)
+        student = Student.objects.create(student_code="PiC6B0001", class_obj=klass, full_name="Paid Student", status="Active")
+        month = _d.today().replace(day=1)
+        StudentPaymentReceipt.objects.create(
+            student=student, payment_date=_d.today(), receipt_number="PAY-X-1", total_amount=3000, total_discount=0,
+            items=[{"payment_type": "Monthly Fee", "payment_month": month.isoformat(), "label": "Monthly Fee", "amount": 3000}])
+        response = self.client.get(reverse("admin:core_studentpaymentreceipt_monthly_status"))
+        row = next(r for r in response.context["rows"] if r["student"].pk == student.pk)
+        self.assertEqual(row["amount_paid"], 3000)

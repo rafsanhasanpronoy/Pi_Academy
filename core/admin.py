@@ -2889,7 +2889,7 @@ class StudentPaymentReceiptAdmin(admin.ModelAdmin):
                     continue
                 if item_month.year == target_month.year and item_month.month == target_month.month:
                     paid_info[receipt.student_id] = {
-                        "net": item.get("net", 0),
+                        "net": item.get("amount", item.get("net", 0)),
                         "receipt_pk": receipt.pk,
                     }
 
